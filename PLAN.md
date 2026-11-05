@@ -1,179 +1,141 @@
 # Knock
 
-> Your Wedgie, but it vouches that you're a human. "Wallet address; with humanity."
+> Prove you're a human with one press of a button on a device you own. Your Wedgie vouches for "wallet address; with humanity".
 
-Status: **planning only** (no code yet). This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. See the changelog at the bottom.
+Status: **planning only** (no code yet). This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. The changelog is at the bottom.
 
-Principle: it's fun first. Practicality (testnet faucets, airdrops) is a bonus. Over-engineering is explicitly OK.
+Principle: fun first. Practicality (testnet faucets, airdrops, humans-only pages) is a bonus. Over-engineering is explicitly OK.
 
----
+## 1. Summary
 
-## 1. Pitch
+A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe Signer + `knock_*` messages).
 
-A Wedgie (Raspberry Pi Pico + 240x240 LCD + Trust M secure chip) becomes a pocket **proof-of-humanity + ENS identity token**.
+- **Setup, once**: bind the device key to a World ID 4.0 nullifier through a stateless `KnockBinding` contract on World Chain (it emits `Bound`). Then name the device in ENSv2 (`wedgie.itzraj.eth`) with `knock.*` records pointing at that binding.
+- **A knock**: a dApp opens the **Door** popup → the Wedgie shows the origin + KNOCK → green press → a signed `KnockPass`.
+- **Verification**: the site's own verifier checks ENS (active, key), the `Bound` receipt on World Chain, the P-256 signature, the counter, and that the nullifier matches across device, ENS and log.
+- Nobody sits in the middle, and Knock's server isn't involved at knock time.
 
-- **Setup (once)** via *Knock Console* (web app): verify World ID, bind it on World Chain, mint an ENSv2 subname, store everything on the Wedgie.
-- **Use (anywhere)**: a dApp has a "Knock" button. The user opens *Knock Door* (a web page that holds the single Web Serial connection), and the dApp's request shows up on the Wedgie screen. The user presses green, and the Wedgie answers with a signed, selective-disclosure response. The dApp verifies the answer against the chain and ENS.
+## 2. Decisions
 
-It works like World ID in a tiny device, with its own expiry and a "show only what's asked" model.
+| # | Decision |
+|---|---|
+| D1 | Chain roles: **ENSv2 on Ethereum mainnet, launched** (identity + status; user-confirmed, verify on day one, see R1) and **World ID 4.0 + `KnockBinding` on World Chain mainnet (480)** (humanity). Sepolia ENSv2 is the fallback and for rehearsal. |
+| D2 | World ID on-chain verification uses World's **`WorldIDVerifier`**: prod `0x00000000009E00F9FE82CfeeBB4556686da094d7`, staging `0x703a6316c975DEabF30b637c155edD53e24657DB` (both chain 480). Confirmed on docs.world.org. |
+| D3 | The user has a **physical Wedgie**. The virtual wedgie (`wedgie.dev/virtual`, `/code`) is for fast screen iteration and as a fallback. |
+| D4 | Backend in **Rust** (axum, alloy, idkit-core): `knockd` (signer), `server/verifier`, `crates/knock-verify`. |
+| D5 | Contracts: **Foundry**, `via_ir = true`. |
+| D6 | **User-chosen names, multiple devices.** The user picks the parent (`itzraj.eth`) and the device label (`wedgie`, `spare`, anything ENSIP-15 valid). Several devices can carry one nullifier, each with its own key, ENS name and status. |
+| D7 | Frontend: **Next.js** for everything (Door, Console, Revoke page, Bouncer), deployed or local. |
+| D8 | IPFS / reproducible Door build is **deferred**. Keep the Door client-only (no server runtime) so a static export stays possible. |
+| D9 | **One wallet.** The user's wallet is the ENS controller, the address the device name resolves to (`addr`), and the wallet allowed to revoke. No separate phone wallet or custom role for now. |
+| D10 | The Knock app lives in its **own public GitHub repo** (installed via wedgie.dev/connect). This repo is the monorepo for everything else. |
 
-## 2. Components
+## 3. Design essentials
 
-| # | Component | What | Tech (proposed) |
-|---|---|---|---|
-| A | **Knock app for Wedgie** | MicroPython app, installed from a public GitHub repo via wedgie.dev/connect. Holds the key, displays requests and QR codes, signs. | MicroPython, `optiga` module, `ui`/`lcd`/`keys`/`save` |
-| B | **Knock Console** | Web setup wizard. IDKit → bind() on World Chain → ENS subname → write to Wedgie. | TS, Vite/Next, `@worldcoin/idkit` v4, viem, Web Serial |
-| C | **Knock Door** | Web page that owns the serial port and relays dApp requests to the Wedgie and responses back. Wedgie supports only one connection, so Door is the only thing that talks to it. | TS, Web Serial, BroadcastChannel / postMessage / popup |
-| D | **Knock SDK** (`@knock/sdk`) | dApp-side: `knock.request({...})` opens/pairs with Door; `knock.verify(response)` does all the checks. | TS, viem, WebCrypto (P-256) |
-| E | **Contracts** | `KnockBinder` (World Chain mainnet) and `KnockRegistrar` (ENSv2 chain; see risks). | Solidity, Foundry |
-| F | **Demo dApp** | A fun faucet / "humans only" page that uses the SDK. | TS |
-| G | **Protocol spec** | Message formats, signed payload layout, verification algorithm. Shared by B/C/D/A. | Markdown + shared TS package |
+**Trust model**: one P-256 key (Safe Signer's locked key, Trust M slot `KEY2`, public key in `DATA[11]`); three independent authorities:
+1. **Identity** = ENSv2 records on the device name.
+2. **Humanity** = a `Bound` event on World Chain.
+3. **Presence** = the device signs the site's fresh challenge after a physical green press.
 
-Proposed repo layout (monorepo):
+Knock never touches funds.
 
-```
-knock/
-  PLAN.md
-  docs/protocol.md
-  wedgie-app/        # A: wedgie.json + knock*.py
-  apps/console/      # B (+ C as /door route, same origin)
-  apps/demo/         # F
-  packages/sdk/      # D
-  packages/protocol/ # shared types, canonical encoding, verify logic
-  contracts/         # E (Foundry)
-```
+**Wire (Wedgie ↔ Door)**: JSON lines over USB serial, ≤ 6 KB each, `id` echoed. Messages: `knock_hello` → `knock_info`; `knock_qr` (draw a URI as QR, no signing); `knock_bind` → `knock_bind_sig` (press); `knock_enroll` → `knock_enrolled` (press); `knock_confirm` (stores name, status, nullifier, expiry, PoH pointer; drives the badge); `knock_pass` → `knock_pass_sig` (press); `knock_cancel`. Errors: `bad_request, busy, rejected, timeout, cancelled, not_enrolled, already_enrolled, too_large, internal`. The app keeps answering the firmware's `hello`/`ping` and adds `"knock": 1`; every `safe_*` request keeps working.
 
-## 3. What the docs gave us (facts that shape the design)
+**Device rules**: states IDLE / PROMPT / QR / SIGNING. No signing without a physical green press made after the prompt is fully shown; presses in the first 0.6 s and USB-simulated presses are ignored. Red, 120 s of silence, or `knock_cancel` return to IDLE. The device computes every digest itself from fields it parsed. A monotonic counter is incremented and stored before every `knock_pass` reply. The device has no clock. Screens name the action in words (BECOME, BIND, KNOCK), the device name, and the origin labelled "unverified". Never show button letters.
 
-**Wedgie** (wedgie.dev/skill.md, code.md, trustm.md, usb.md)
-- One app at a time. Any public GitHub repo with `wedgie.json` can be installed (unsigned, **full device access**, needs a green press on device). Shelf apps are reviewed and signed (email wedgie@buidlguidl.com).
-- Secure chip: OPTIGA Trust M (I2C 0x30) or ATECC608. **P-256 only, no secp256k1.** Keys are generated in the chip and never leave it. `c.genkey(optiga.KEY3)` returns the public key once (the app must save it). `c.sign(slot, digest)` signs a digest we supply. KEY2 and DATA[11] belong to Safe Signer, so we use KEY3 or KEY4.
-- Factory key (slot E0F0) with an Infineon-signed certificate in `CERT` (E0E0, ~485 B), readable via `c.read(optiga.CERT)`. This is our **attestation root**. The docs do not describe an attestation procedure beyond this.
-- Display: 240x240, 16 colors, ST7789, via `lcd.LCD()`. Input: joystick + A (green), B, X, Y (red). `ui.ask`, `ui.page`, etc. exist. **No QR helper is mentioned.**
-- Storage: `save.store/load` at `/saves/<mod>/`. Readable by any plugged-in computer, so **public data only**. Survives app updates, not `/reset`.
-- Host link: USB serial, JSON lines at 115200 baud, 6 KB max line. Web Serial needs Chrome or Edge. Manifest flag `"usb": true` means the app speaks its own USB protocol and the firmware stops answering USB. The device is sealed, and sensitive operations need a physical green press. The `open` request, `shot` and `press` need an approved `open`.
-- Networking is allowlisted in `wedgie.json` `"net"`, with host-relayed TLS and 6 KB response caps. We probably don't need it, since the Console and Door do the chain work.
-- Not an audited hardware wallet. A lost device means a lost key, so rebinding must be a first-class flow.
+**Signed structures** (EIP-712, domain `Knock` v`1`): `KnockHello`, `KnockEnroll`, `KnockBind`, `KnockPass(challenge, origin, deviceNode, counter, mode, nullifier, humanRef)`. Signatures are P-256 `r||s`, 64 bytes, low-s, over the digest as given (no re-hash).
 
-**World ID** (docs.world.org/world-id/SKILL.md; `world.id/SKILL.md` 301s there)
-- `@worldcoin/idkit` v4, `IDKitRequestWidget`, preset `proofOfHuman` (Orb). Flow: the server signs an RP context (`@worldcoin/idkit-core/signing`), the widget runs, and the **unmodified** result is POSTed to `https://developer.world.org/api/v4/verify/{rp_id}`. The nullifier is the uniqueness key, unique per (action, nullifier). Staging works only with the simulator, production only with the real World App.
-- **Gaps** (the page didn't cover them): on-chain verifier contract on World Chain for v4 proofs, proof expiry, how the connect URL / QR is built. See open questions.
+**ENS records** on `<label>.<parent>`: `addr` (60), `knock.v=1`, `knock.key` (33-byte compressed P-256), `knock.status` (`active|revoked`), `knock.nullifier`, `knock.poh` (`eip155:480:tx:<hash>`), `knock.sc` (`S1|S2`), optional `knock.att`. The device name sits in a `UserRegistry` subregistry of the parent with a Permissioned Resolver. The device key holds no role.
 
-**ENSv2** (docs.ens.domains/llms-full.txt, ensv2 pages)
-- Per-name registries. Subnames are minted with `register(label, owner, subregistry, resolver, roleBitmap, expiry)` on the parent's own registry (a `UserRegistry` proxy via the Verifiable Factory), then `setSubregistry` on the parent. Don't build on the Name Wrapper.
-- **Enhanced Access Control** replaces fuses. Roles are in a bitmap. `grantRoles/revokeRoles` apply per name, `grantRootRoles/revokeRootRoles` contract-wide. `ROLE_REGISTRAR = 1<<0`, `ROLE_RENEW = 1<<16`. Omit `ROLE_CAN_TRANSFER_ADMIN` to make a subname non-transferable. Expiry is an absolute timestamp. Resolver: a Permissioned Resolver per account, with text records.
-- **ENSv2 is deployed on Sepolia only** per the docs. Min libs: viem ≥ 2.35.0, ENSjs ≥ 5.2.5 for writes.
+**`KnockBinding`** (stateless, ownerless, no upgrade path): `bind(nullifier, nonce, expiresAtMin, issuerSchemaId, genesisIssuedAtMin, proof[5], x, y, r, s)`. It computes the compressed key `K` and `signalHash = keccak256(K) >> 8`, calls `WorldIDVerifier.verify(...)` with action `keccak256("knock-bind") >> 8` (reverts on failure), verifies the device's P-256 signature over `KnockBind` via `P256VERIFY` at `0x100`, and emits `Bound(nullifier, keyHash, expiresAtMin)`. It writes no storage. Anyone may submit it.
 
-## 4. Architecture
+**World ID request**: IDKit v4, preset `proofOfHuman`, action `knock-bind`, signal = `0x` + the 66 hex digits of the device's compressed key. `knockd` signs the RP context. The Console shows `connectorURI` on the Wedgie via `knock_qr`.
 
-### 4.1 Identity model
+**Door protocol**: the dApp opens `<door-origin>/knock`; the popup posts `knock/ready`; the dApp posts `knock/request {challenge, mode}`; the Door takes the origin from `event.origin` (never from the message) and checks `event.source`; the result goes back with `knock/result` to that origin only. Modes: **1 Bound** (humanity from the binding) and **2 Fresh** (a World ID proof per knock, `humanRef = keccak256(IDKit result)`).
 
-Three linked facts form the **Knock Binding**:
+**Verifier (V1–V8, in order, fail closed)**:
+1. Parse (low-s).
+2. The challenge is ours, unexpired (≤ 2 min), unconsumed, and the origin is ours.
+3. Resolve the name and check validity: not expired, `knock.v`, `status=active` seen ≥ 3 blocks deep, `revoked` honoured from the latest block, cache ≤ 60 s; a key seen revoked is invalid forever.
+4. Recompute the `KnockPass` digest from our own challenge and origin; verify the signature under `knock.key`.
+5. The counter is above the highest stored for this key.
+6. Mode 1: `humanRef` is zero; the signed nullifier equals `knock.nullifier`; the receipt named by `knock.poh` succeeded on an accepted `KnockBinding`, with a `Bound` log whose `keyHash` and `nullifier` match, not expired, final.
+7. Mode 2: forward the IDKit result bytes to World's verify API and check `humanRef`, the action, and `signal_hash(challenge)`.
+8. Optionally enforce one entry per (site action, nullifier).
 
-1. **Human**: a World ID nullifier `N` (proof of human).
-2. **Device**: a P-256 pubkey `P` generated inside the Wedgie's Trust M (+ Infineon cert chain).
-3. **Wallet**: an EVM address `W` (the user's connected wallet).
+Then commit atomically: consume the challenge, store the counter, insert the nullifier. A rejected knock consumes nothing.
 
-Stored in three places that cross-reference each other (this is what makes revocation work):
+**Revocation**: the user's wallet sets `knock.status = revoked` (one mainnet tx). A revoked key never returns; a new device needs a new chip. Binding a new device does not cut off the old one, only revoking does.
 
-- **World Chain, `KnockBinder.bind(...)`**: emits and stores `(N, P_hash, W, expiry)` → `bindTx`. Rebinding the same human replaces the old binding, so one human has one active Wedgie. A `revoke()` is also available (by `W`).
-- **ENSv2 subname** `<handle>.<knock-parent>`: owned by `W`, `addr` = `W`, text records `knock.bindTx`, `knock.pubkey`, `knock.chain=480` (World Chain id), and `knock.cert` (hash or pointer to the attestation). Roles are limited: non-transferable, resolver locked, expiring. Revocable by the registrar (details pending the ENSv2 role set).
-- **Wedgie `/saves/knock/`**: ENS name, bindTx, pubkey, expiry, and public metadata. Nothing secret is stored there.
+## 4. Facts verified (2026-11-05)
 
-### 4.2 Setup flow (Console)
+- **World ID 4.0 on-chain**: `IWorldIDVerifier.verify(nullifier, action, rpId, nonce, signalHash, expiresAtMin, issuerSchemaId, credentialGenesisIssuedAtMin, uint256[5] proof) external view`; it reverts on failure. `action = uint256(keccak256(bytes(action))) >> 8`. Docs recommend an upgradeable proxy for the consumer. `world-id-protocol` `contracts/deployments/core/production.json` lists `worldIDVerifier` proxy `0x…09E00F9F…94d7`, `worldIDRegistry` `0x0000000000aE079e…67d4`, `rpRegistry` `0xD9A213A9…5BbC`. The docs do not define a proof validity window; only `expires_at_min` is passed through. Proofs must be bound soon after they're made, because Merkle roots age.
+- **ENSv2 mainnet contracts** (docs.ens.domains/learn/deployments): ETH Registry `0xf60aba43…85e2`, Root Registry `0x2553c09b…a91e`, ETH Registrar `0xd6d8369e…cc81`, Universal Resolver V2 `0x06fdd07f…cfd5`, Verifiable Factory `0x77510ba1…30d2`, Permissioned Resolver impl `0x565b0f45…57c5`, User Registry impl `0xfaa23592…8d72`. Sepolia equivalents are on the same page. That page said resolution stays on ENSv1 "until the launch completes"; the user says the launch is done (R1).
+- **ENSv2 EAC**: `grantRoles/revokeRoles` per name, `grantRootRoles/revokeRootRoles` contract-wide; `ROLE_REGISTRAR = 1<<0`, `ROLE_RENEW = 1<<16`; fuses are replaced by roles. Subname creation is `register(label, owner, subregistry, resolver, roleBitmap, expiry)` on the parent's `UserRegistry` (deployed through the Verifiable Factory; `initialize` must include `ROLE_REGISTRAR_ADMIN` and `ROLE_RENEW_ADMIN`), then `setSubregistry(parentLabelhash, userRegistry)` on the parent's registry. Permissioned Resolver setters take DNS-encoded names. Never cache token IDs or resolvers (`findTokenId` at write time). Min libs: viem ≥ 2.35.0, ENSjs ≥ 5.2.5 for ENSv2 writes.
+- **Wedgie**: Trust M is P-256 only. `c.sign(slot, digest)` signs a digest as given. The factory key's Infineon cert is readable via `c.read(optiga.CERT)`. Apps need `"usb": true` for their own protocol. Saves are readable by any plugged-in computer (public data only). A GitHub-installed app is unsigned with full device access, and any app can use the chip. Web Serial: Chrome/Edge only, one holder of the port at a time.
+- **IDKit v4**: the connect URL is exposed as `connectorURI`. Production actions work only with the real World App; staging only with the Simulator.
+- **Not yet read**: wedgie `safe.md`, `security.md`, `virtual.md`, the Safe Signer source (`clawdbotatg/wedgie-safe`; Knock is built on it), and docs.world.org RP-signature pages. Needed before M1/M3.
 
-```
-0. Prereq: install "Knock" app on Wedgie from GitHub at wedgie.dev/connect.
-1. Console connects via Web Serial -> Knock app answers hello {chip, uid, version}.
-2. Wedgie generates P-256 key in Trust M (KEY3), returns P + device cert (+ factory-key
-   signature over P as attestation, if the chip allows signing with the factory key).
-3. IDKit: Console server signs RP context -> IDKitRequestWidget -> user scans the QR
-   (QR also shown on the Wedgie screen) -> proof -> verified -> nullifier N.
-4. Console sends bind(N, hash(P), W, expiry, proof/attestation) to KnockBinder on World Chain,
-   signed by W in the browser wallet. Get bindTx.
-5. Console mints ENSv2 subname to W (via KnockRegistrar), sets records incl. bindTx.
-6. Console writes {ensName, bindTx, expiry, ...} to the Wedgie. The Wedgie shows green "Knocked in".
-```
+## 5. Components and stack
 
-### 4.3 Request flow (SDK + Door)
+| Package | What | Stack |
+|---|---|---|
+| `knock-wedgie` (separate repo) | Knock app: Safe Signer fork + `knock_*`, screens, pure-Python QR encoder, Human badge, activity dot | MicroPython, `wedgie.json` (`usb: true`) |
+| `apps/door` | Door + Console + Revoke page (client-only) | TypeScript, Next.js, Web Serial, viem |
+| `apps/bouncer` | Demo dApp: humans-only claim, live checklist, bot script | TypeScript, Next.js |
+| `packages/door-sdk` | `knock({challenge, mode})`: opens the Door popup, returns the assertion | TypeScript |
+| `server/knockd` | Signs World ID RP contexts and `bind()` txs; no RPC, no IP logs | Rust (axum, idkit-core, alloy) |
+| `server/verifier`, `crates/knock-verify` | Each site's verifier: `/challenge`, `/verify`, SQLite | Rust (alloy) |
+| `contracts/` | `KnockBinding`, staging and prod deploy scripts | Solidity, Foundry |
+| `spec/` | Protocol spec (CC0), JSON schemas, test vectors, written in M0 | Markdown |
 
-```
-dApp --knock.request({want:["ens","poh"], origin, nonce, ttl})--> Door (popup / BroadcastChannel)
-Door --> Wedgie (serial): {t:"knock", origin, want, nonce, exp}
-Wedgie screen: "faucet.xyz knocking. Wants: ENS name, Human. [Green = open] [Red = no]"
-              (joystick can untick optional fields = selective disclosure)
-Green -> chip signs sha256(canonical(payload)) with P
-Wedgie --> Door --> dApp: {ens?, bindTx?, pubkey, sig, cert, claims, nonce, exp}
-dApp: knock.verify(resp):
-  1. nonce/origin/expiry match what we asked
-  2. P-256 sig valid under P (WebCrypto)
-  3. cert chain valid -> genuine Trust M (Infineon root) [+ factory-key attestation of P]
-  4. World Chain: bindTx / KnockBinder says (N, hash(P), W) active & not expired
-  5. ENS: name resolves, addr == W, text knock.bindTx == bindTx, not expired/revoked
-  6. => PoH on World Chain + wallet address W from ENS. Done.
-```
+Secrets (RP key, gas key) live in `.env` / a local key file, both **gitignored**; they're read only by `knockd`. They never go in the repo, the browser, or this file.
 
-Any mismatch (revoked, rebound elsewhere, subname moved or expired) → **reject**.
+## 6. Plan for the 36-hour window
 
-### 4.4 Selective disclosure ("it's like World ID, in a tiny device")
+T0 = when the deadline was given (2026-11-05). Commit at the end of each block. Hours are cumulative and tentative.
 
-The request lists scopes: `ens`, `poh`, `wallet`, `expiry`. The Wedgie answers only what's asked. Optional scopes can be toggled on the device. Responses are always bound to `origin + nonce`, so they can't be replayed on another site. Per-dApp "visitors" (remembered origins) can show a badge on the screen.
+| Hours | Block | Done when |
+|---|---|---|
+| 0–2 | **M0 Setup**: monorepo skeleton (pnpm, Foundry, Cargo), read Safe Signer source + `safe.md`/`security.md`, ENS day-one check (R1), check that `knockd` can load its RP + gas keys, write `spec/` and test vectors for the 4 EIP-712 digests | repo builds, vectors agree in TS |
+| 2–10 | **M1 Wedgie app**: fork Safe Signer; `knock_hello`, `knock_pass` with press/counter/state machine, screens, QR encoder, then `knock_enroll`/`knock_bind`/`knock_confirm`, Human badge. Real hardware | `wedgie.py` shows a signed `knock_pass` after a green press; Safe Signer still works |
+| 6–12 | **M2 `KnockBinding`** (parallel): Foundry tests, fork test with a Simulator proof, deploy staging (then prod), measure gas | `bind()` emits `Bound` on chain 480 staging |
+| 10–18 | **M3 `knockd` + Console**: `/rp-context`, `/sign-bind`, IDKit with the QR on the Wedgie, bind tx, ENS subname + records (Sepolia first, then mainnet) | one real enrollment end to end, Human badge on device |
+| 18–26 | **M4 Door + `door-sdk` + verifier**: popup protocol, V1–V8, atomic commit, revoke path | a site accepts a knock and rejects a revoked one |
+| 26–32 | **M5 Bouncer + demo**: checklist UI, bot script, spare device, demo script, reset procedure | full demo runs twice without edits |
+| 32–36 | **Buffer**: README (with honest limits), recording, deploy | submitted |
 
-## 5. Fun / over-engineering backlog
+**Cut order if behind** (first to go → last): Fresh mode, `knock.att` attestation, Helios, local bridge, Anon-RPC, "send it yourself". Anon-RPC and IPFS are **stretch**. Anon-RPC goes in only if M5 finishes with 4+ hours to spare. Mainnet ENS writes: rehearse on Sepolia, and keep Sepolia as the demo fallback.
 
-Roughly in order of "gives me joy per effort":
+## 7. Risks
 
-- **Knock-knock confirm**: the confirm gesture is a double press (A-A). The screen flashes green with a door animation. Red = door slams.
-- **Peephole screen**: shows the origin, favicon-ish glyph, and what it wants.
-- **IDKit QR on the Wedgie's own screen** during setup (Console encodes the QR matrix and sends it over serial, and the app draws modules; no MicroPython QR encoder needed).
-- **Expiry ring**: the badge visibly counts down on the idle screen. When expired it goes grey and "Knock again" re-verifies.
-- **Visitor log**: the last N origins that knocked, stored on the device.
-- **Door sounds / button-LED-style flashes** (screen only; the hardware has no buzzer).
-- **Demo faucet** gated by Knock, plus a "humans only" guestbook that shows ENS names.
-- **Role showcase**: ENS subname variants (a guest pass that is time-limited and non-transferable; a signing-limited one).
-- **On-chain P-256 verify** (RIP-7212 / precompile, if World Chain has one) so contracts can check a Wedgie signature directly. This gives us "Knock-gated smart contracts".
+- **R1 (low) – ENSv2 live status.** The user says ENSv2 is launched and `itzraj.eth` is on ENSv2 and available. Day-one check (10 min): resolve `ur.integration-tests.eth` (expect `0x2222…2222`) and read `itzraj.eth`'s registry. Verifier chain config supports mainnet and Sepolia. Reconcile the Universal Resolver address before hardcoding: one source gives proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`, the deployments page lists `0x06fd…cfd5`.
+- **R2 – Units.** World's `expires_at_min` is in **minutes**; other times are seconds. A `Bound` log's expiry check ("zero or later than now") must convert explicitly, and tests must cover it.
+- **R3 – Built on Safe Signer.** The app must keep every `safe_*` request working and pin a Safe Signer version. Forks drift. First task in M1: read the source.
+- **R4 – World production vs staging.** Real World App users need a production action. Develop against staging + Simulator. Never accept staging deployments in a production verifier.
+- **R5 – 36 hours.** The core loop (M1–M5) comes first; see the cut order.
+- **R6 – Gas key balance is ~$2.** Fine for staging binds (a fraction of a cent each), but watch it; rate limits in `knockd` bound the damage if it leaks.
+- **R7 – Honest limits (keep in the README)**: no PIN on the Wedgie (a thief can knock until revoked); proof farming is not solved; the shared public nullifier is linkable across sites in Bound mode; installed apps can use the chip (S1 vs S2); the origin is "unverified" on the device; the Wedgie is not an audited hardware wallet.
+- **R8 – Door origin.** Web Serial permission is per origin, and the port is exclusive (the Door and `wedgie.dev/safe` can't run together).
+- **R9 – One wallet for controller and revoker** (D9) means a compromised wallet can both rename and revoke, and there's no separate low-power revoke key. Acceptable for now; revisit with a status-only role if time allows.
 
-## 6. Milestones (each ends in a commit)
+## 8. Inputs and status
 
-- **M0 – Repo + spec**: repo skeleton, `docs/protocol.md` (message formats, canonical payload, verification algorithm).
-- **M1 – Wedgie app skeleton**: `wedgie.json`, hello/keygen/sign over serial, screen UI. (Needs a physical Wedgie to test; otherwise use the virtual wedgie `window.wedgie` page.)
-- **M2 – Contracts**: `KnockBinder` (Foundry tests + fork tests), `KnockRegistrar` against ENSv2 Sepolia.
-- **M3 – Console**: Web Serial, IDKit, bind tx, ENS mint, device write.
-- **M4 – Door + SDK**: request/response relay, `verify()` with all 6 checks.
-- **M5 – Demo dApp** and polish (knock-knock UX, expiry ring, QR on device).
-- **M6 – Hardening**: rebind/rotate/revoke flows, threat-model doc, optional shelf submission to Wedgie.
+- World RP (`rp_id` + signing key): **provided by the user** in a local JSON key file (gitignored). `knock-bind` action in staging + prod: to confirm in M0.
+- Gas key for `knockd` on World Chain: **funded with ~$2**, key in `.env` (gitignored).
+- Wallet: one wallet is controller, `addr` target, and revoker (D9).
+- Parent name: `itzraj.eth`, on ENSv2, available.
+- Wedgie app repo: separate public repo (D10); name TBD (`knock-wedgie` proposed).
 
-## 7. Risks, caveats, honest "how stupid is it"
-
-**Verdict**: not stupid. It's a good, fun idea. Parts of it are weaker than they sound, and I'd rather say that up front.
-
-- **"Secure chip attestation" is weaker than it sounds.** The Infineon cert proves *a real Trust M exists*. It doesn't prove *our firmware* is the one asking it to sign. By default, any program on the Wedgie can use `KEY2–4`, and GitHub-installed apps are unsigned with full access. So the attestation proves "a genuine chip holds this key" (good enough for fun and for faucets), but not "only Knock can use it". Mitigations are to lock the slot's metadata (permanent, dangerous), to apply for the signed Shelf, or to treat it as honest-but-limited in the spec.
-- **Presence ≠ wallet control.** Per-session signatures prove "the bound device was physically present and a human pressed green". Wallet control was proven once, at bind time. I think that's fine, and the spec should say it clearly.
-- **No transfer-resistance beyond the bind.** Someone can sell or lend the Wedgie. Revocation and expiry limit the damage. That's inherent to any PoH token.
-- **ENSv2 is Sepolia-only right now** (per the docs I read). World Chain is mainnet (the user's requirement). So the dApp-side verification spans **World Chain mainnet + ENS on Sepolia** until ENSv2 ships on mainnet. Fine for a hackathon-style demo, and bad for real airdrops.
-- **World ID on-chain verification is unclear for v4.** The docs say to POST to the developer-portal verify API. The `bind()` contract may therefore not verify a ZK proof itself and would instead trust a Knock verifier signature (a centralization point) unless an on-chain v4 verifier exists. Needs digging.
-- **Wedgie is P-256 only**, so it can't sign EVM transactions or messages. It signs Knock payloads only. The wallet stays separate (consistent with the design).
-- **Web Serial = Chrome/Edge only**, and a single connection. The Door-as-hub design handles that, but browser extension pairing between Door and dApp tabs needs care (popup vs BroadcastChannel; origin checks).
-- **Custom USB protocol trade-off**: `"usb": true` stops the firmware answering USB, so the app must implement hello/keygen/sign itself, or we use the firmware's request channel if possible. To investigate.
-- Not audited anywhere in this chain. Treat as a toy until reviewed.
-
-## 8. Open questions (to resolve before/during build)
-
-1. **World ID on-chain**: is there a v4 verifier on World Chain? What is a proof's validity window? How is the IDKit connect URL produced, so we can render it on the device? (`docs.world.org/world-id/idkit/integrate` and the signatures spec are the next reads.)
-2. **ENSv2 roles list** (`/ensv2/permissioned-registry`): which roles exist for revoke/unregister and expiry? Can the parent revoke a subname (burn / set expiry to now)? Exact Sepolia deployment addresses (`/learn/deployments#sepolia-ensv2`).
-3. **Trust M attestation**: can the factory key (E0F0) sign an arbitrary digest (e.g. over `P`)? Does the cert chain to a published Infineon root we can embed in the SDK?
-4. **Wedgie app↔host protocol**: how does a `usb:true` app receive custom requests? How do we render the host's QR matrix efficiently on a 16-color framebuffer? Virtual wedgie (`virtual.md`) for dev without hardware?
-5. **Chain for ENS**: stay on Sepolia ENSv2 for the demo, or wait for mainnet? Who owns the parent name (e.g. a `knock.*` name on Sepolia)?
-6. **Does the user have a physical Wedgie now**, or do we build against the virtual one first?
-7. **Naming**: ENS handle is user-chosen (`alice.knock...`) or derived (nullifier prefix)?
-8. **Stack preferences**: Next.js vs Vite; Foundry vs Hardhat. (Defaults: Vite + Foundry.)
-
-## 9. Sources read
+## 9. Sources
 
 - https://wedgie.dev/skill.md, /code.md, /trustm.md, /usb.md
-- https://docs.world.org/world-id/SKILL.md (redirect target of world.id/SKILL.md)
-- https://docs.ens.domains/llms-full.txt (first 100k chars of ~1.8M), /ensv2/enhanced-access-control, /ensv2/tutorial-contract-developers
+- https://docs.world.org/world-id/SKILL.md, /world-id/idkit/integrate, /world-id/idkit/onchain-verification; github.com/worldcoin/world-id-protocol `contracts/deployments/core/production.json`
+- https://docs.ens.domains/llms-full.txt (first 100k of ~1.8M chars), /ensv2/enhanced-access-control, /ensv2/tutorial-contract-developers, /learn/deployments
 
 ## 10. Changelog (prompts and decisions)
 
-- **2026-11-05** – Initial prompt: Knock concept (Console, SDK, Door, bind() on World Chain, ENSv2 subname with limited roles, Wedgie attestation, selective disclosure, fun-first). Ground rules: keep this PLAN.md updated with each prompt; git repo with frequent commits; **plan only for now**. Research done on the 3 docs, plan drafted.
+- **2026-11-05** – Initial prompt: Knock concept (Console, SDK, Door, bind() on World Chain, ENSv2 subname, Wedgie attestation, selective disclosure, fun-first). Rules: keep PLAN.md updated; git repo with frequent commits; plan only.
+- **2026-11-05** – User answers: ENSv2 launched; World ID has an on-chain verifier (confirmed, D2); physical Wedgie; Rust backend, Foundry, Next.js; user-chosen names and multiple devices. Added the detailed design (§3), risks, and a first schedule.
+- **2026-11-05** – IPFS deferred, Next.js everywhere (D7/D8); `itzraj.eth` available on ENSv2; deadline 36 hours; Anon-RPC demoted to stretch; 36-hour schedule and cut order added.
+- **2026-11-06** – User: World RP keys are in a local JSON file; gas key funded (~$2) in `.env`; one wallet is controller, `addr` target and revoker (D9); Wedgie app gets its own repo (D10). Cleaned the repo and its history; secrets are gitignored and never committed.

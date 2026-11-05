@@ -1,0 +1,9 @@
+.env
+.env.*
+*.key.json
+knock-worldchain-key.json
+node_modules/
+target/
+out/
+cache/
+.next/
