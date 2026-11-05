@@ -28,7 +28,7 @@ A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe
 | D7 | Frontend: **Next.js** for everything (Door, Console, Revoke page, Bouncer), deployed or local. |
 | D8 | IPFS / reproducible Door build is **deferred**. Keep the Door client-only (no server runtime) so a static export stays possible. |
 | D9 | **One wallet.** The user's wallet is the ENS controller, the address the device name resolves to (`addr`), and the wallet allowed to revoke. No separate phone wallet or custom role for now. |
-| D10 | The Knock app lives in its **own public GitHub repo** (installed via wedgie.dev/connect). This repo is the monorepo for everything else. Locally it's `$HOME/knock-wedgie`: a full-history clone of `clawdbotatg/wedgie-safe` with `origin` renamed to `upstream`. The GitHub repo gets created later, only with the user's OK. |
+| D10 | Repos live in the **`getknock`** GitHub org, **private for now**. `getknock/knock` is this monorepo. `getknock/knock-wedgie` is the Wedgie app; locally `$HOME/knock-wedgie`, which keeps Safe Signer's history with `upstream` = `clawdbotatg/wedgie-safe`. Until it's public, the app installs with `wedgie.py install .`. Making either repo public needs the user's OK. |
 | D11 | **Bun workspaces** (the user's choice): `bun install` writes `bun.lock`, tests run on `bun test`, and root scripts run `bun run --filter '@knock-dev/*' <script>`. No global installs. |
 | D12 | The Knock app is a **fork of Safe Signer that keeps `"mod": "safe"`**, with display name "Knock". It's a drop-in replacement: saves stay in `/saves/safe/`, wedgie.dev/safe keeps working, and the diff stays small for upstream merges. New code goes in `safe_knock.py`, loaded per request like `safe_msg`, and `safe_qr.py`. The manifest requires every file to be `safe.py` or start with `safe_`. |
 | D13 | **QR encoded on the device**: pure Python, byte mode, ECC M, version ≤ 13 (69 modules × 3 px), **fixed mask** (no penalty scoring) to save CPU and RAM. Fallback: the host sends the module bitmap. |
@@ -139,11 +139,12 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 
 ## 8. Inputs and status
 
-- World RP signing key: **provided** in a local JSON key file (gitignored). It holds only the key (`privateKey` + its address), **not** the `app_id` or `rp_id`. Those still need to go in `.env` as `WORLD_APP_ID` / `WORLD_RP_ID` (names in `.env.example`) before M2, because `rp_id` is baked into `KnockBinding` at deploy. The `knock-bind` action in staging + prod: still to confirm.
+- World RP signing key: **provided** in a local JSON key file (gitignored). It holds only the key (`privateKey` + its address).
+- World `app_id` / `rp_id`: **provided** in `.env` as `WORLD_APP_ID` (`app_…`) / `WORLD_RP_ID` (`rp_…`), gitignored. `rp_id` is baked into `KnockBinding` at deploy (M2). The `knock-bind` action in staging + prod: still to confirm.
 - Gas key for `knockd` on World Chain: **funded** (~0.001 ETH, checked on chain), key in `.env` (gitignored).
 - Wallet: one wallet is controller, `addr` target, and revoker (D9).
 - Parent name: `itzraj.eth`, on ENSv2, available.
-- Wedgie app repo: separate public repo (D10), local at `$HOME/knock-wedgie`; the GitHub name is TBD (`knock-wedgie` proposed).
+- Repos: `getknock/knock` and `getknock/knock-wedgie`, both private (D10).
 
 ## 9. Sources
 
@@ -160,3 +161,4 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-06** – M0: added `@knock-dev/protocol` (EIP-712 digests, helpers, P-256 verify) and `spec/vectors/v1.json`; viem and a hand-rolled encoder agree, 13 tests pass. Verified ENSv2 live and `itzraj.eth` in v2 (R1 resolved). Corrected R2 (`expires_at_min` is a seconds lower bound). Read the Wedgie and Safe Signer; decided the fork approach (D10–D14) and added R10 (RAM). User: use the `@knock-dev` npm scope (D15).
 - **2026-11-06** – User: make the app's icon as an SVG, then PNGs at several sizes. Door with knock lines, picked over two door-knocker versions (D16).
 - **2026-11-06** – User: use Bun. Bun workspaces, `bun test` and `bun.lock` replace npm, vitest and tsx (D11). Same 13 tests pass; vectors unchanged.
+- **2026-11-06** – User: `WORLD_APP_ID` / `WORLD_RP_ID` are in `.env`. Use the `getknock` org, private repos for now: created `getknock/knock` and `getknock/knock-wedgie` and pushed `main` (D10).
