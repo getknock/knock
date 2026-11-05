@@ -3,11 +3,13 @@
   "production": {
     "KnockBinding": "0xB1f8B9c895428d6a0e1f82b0A326BdB357192132",
     "WorldIDVerifier": "0x00000000009E00F9FE82CfeeBB4556686da094d7",
-    "block": 37290206
+    "block": 37290206,
+    "RpRegistry": "0xD9A213A92Bca460D56cDbBF4d775b48fB5925BbC"
   },
   "staging": {
     "KnockBinding": "0x639e41f70CbD1F1395BaC76De427D1469B46B190",
     "WorldIDVerifier": "0x703a6316c975DEabF30b637c155edD53e24657DB",
-    "block": 37290197
+    "block": 37290197,
+    "RpRegistry": "0x37d2462fE7B4a07987263AAd062C6593C4f567b9"
   }
 }
