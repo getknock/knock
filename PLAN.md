@@ -2,7 +2,7 @@
 
 > Prove you're a human with one press of a button on a device you own. Your Wedgie vouches for "wallet address; with humanity".
 
-Status: **M0 done** (`@knock-dev/protocol`, test vectors, icon); **M1 in progress**: the Knock app runs on the user's Wedgie (installed 2026-11-06); next, its key and the checks on the chip. This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. The changelog is at the bottom.
+Status: **M0 done** (`@knock-dev/protocol`, test vectors, icon); **M1 in progress**: the Knock app runs on the user's Wedgie with its key in `KEY4`. Every on-chip check passes (`tools/knock_check.py`), and Safe Signer's key is untouched. Next: `knock_enroll`, `knock_bind`, `knock_qr`. This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. The changelog is at the bottom.
 
 Principle: fun first. Practicality (testnet faucets, airdrops, humans-only pages) is a bonus. Over-engineering is explicitly OK.
 
@@ -177,3 +177,4 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-06** – Added `tools/knock_check.py` in `getknock/wedgie`, for the same checks on the real chip; it passed a dry run against a pretend wedgie.
 - **2026-11-06** – User: is the World action in staging or production (use the World MCP), and how do we make it production? Checked through the Developer Portal MCP: `knock-bind` is a production action of a production app, and its RP is registered in both environments, so nothing needs promoting. A staging action is needed only for Simulator runs (§8, R4).
 - **2026-11-06** – Device session. Installed Knock on the Wedgie; ~121 KB of RAM is free, against ~73 KB under Safe Signer. Both `KEY3` and `KEY4` answered 0x0b, so Knock refused to make a key (R12). User: 0x0b alone means empty, and `KEY4` goes first (D17).
+- **2026-11-06** – Device session, continued. The user made Knock's key in `KEY4` (A, then green). `knock_check.py` passed every check on the real chip: the vector's KnockHello digest, signatures valid under the key and low-s, a green `knock_pass` (counter up by one), and red rejected. Then Safe Signer was reinstalled from the shelf (`safe-59`): its signer and key match the fingerprints taken before Knock went in (kept off the repo, D18). Knock reinstalled after it with the same key, counter and name. The device is left named `wedgie.itzraj.eth`, not bound.
