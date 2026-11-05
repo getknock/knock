@@ -28,13 +28,14 @@ A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe
 | D7 | Frontend: **Next.js** for everything (Door, Console, Revoke page, Bouncer), deployed or local. |
 | D8 | IPFS / reproducible Door build is **deferred**. Keep the Door client-only (no server runtime) so a static export stays possible. |
 | D9 | **One wallet.** The user's wallet is the ENS controller, the address the device name resolves to (`addr`), and the wallet allowed to revoke. No separate phone wallet or custom role for now. |
-| D10 | Repos live in the **`getknock`** GitHub org, **private for now**. `getknock/knock` is this monorepo. `getknock/knock-wedgie` is the Wedgie app; locally `$HOME/knock-wedgie`, which keeps Safe Signer's history with `upstream` = `clawdbotatg/wedgie-safe`. Until it's public, the app installs with `wedgie.py install .`. Making either repo public needs the user's OK. |
+| D10 | Repos live in the **`getknock`** GitHub org, **private for now**. `getknock/knock` is this monorepo. `getknock/wedgie` (renamed from `knock-wedgie`) is the Wedgie app; locally `$HOME/knock-wedgie`, which keeps Safe Signer's history with `upstream` = `clawdbotatg/wedgie-safe`. Until it's public, the app installs with `wedgie.py install .`. Making either repo public needs the user's OK, and first a fresh repo from clean history (D18). |
 | D11 | **Bun workspaces** (the user's choice): `bun install` writes `bun.lock`, tests run on `bun test`, and root scripts run `bun run --filter '@knock-dev/*' <script>`. No global installs. |
 | D12 | The Knock app is a **fork of Safe Signer that keeps `"mod": "safe"`**, with display name "Knock". It's a drop-in replacement: saves stay in `/saves/safe/`, wedgie.dev/safe keeps working, and the diff stays small for upstream merges. New code goes in `safe_knock.py`, loaded per request like `safe_msg`, and `safe_qr.py`. The manifest requires every file to be `safe.py` or start with `safe_`. |
 | D13 | **QR encoded on the device**: pure Python, byte mode, ECC M, version ≤ 13 (69 modules × 3 px), **fixed mask** (no penalty scoring) to save CPU and RAM. Fallback: the host sends the module bitmap. |
 | D14 | Rust workspace and Next.js apps are created when first needed (M3/M4). Use the Universal Resolver proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`. |
 | D15 | Every npm package uses the **`@knock-dev`** scope: `@knock-dev/protocol`, `@knock-dev/door-sdk`, … |
-| D16 | **Icon**: a yellow door in a black frame, black knob, white knock lines, on a violet label (`#6e56cf`). The source of truth is the 12×12 cart grid in knock-wedgie's `wedgie.json`. `tools/icon_svg.py` there makes `assets/icon.svg`; `resvg -w N -h N` makes `assets/icon/icon-N.png` for N = 16, 32, 48, 64, 96, 128, 192, 256, 512, 1024 (multiples of 16, so the pixels stay square). |
+| D16 | **Icon**: a yellow door in a black frame, black knob, white knock lines, on a violet label (`#6e56cf`). The source of truth is the 12×12 cart grid in `getknock/wedgie`'s `wedgie.json`. `tools/icon_svg.py` there makes `assets/icon.svg`; `resvg -w N -h N` makes `assets/icon/icon-N.png` for N = 16, 32, 48, 64, 96, 128, 192, 256, 512, 1024 (multiples of 16, so the pixels stay square). |
+| D18 | **Nothing personal in public files** (repo files, commit messages, anything pushed). No wallet, Safe, signer, relayer or device-key addresses, and no home-folder paths (write `$HOME`). The only exceptions are ENS names and the addresses ENS names resolve to. Public protocol contracts (World ID, ENS, Safe Signer's tokens) are not personal and stay. A slip gets the history rewritten and force-pushed. GitHub can keep force-pushed-away commits reachable by hash, so a repo goes public only as a fresh repo pushed from clean history. |
 
 ## 3. Design essentials
 
@@ -96,7 +97,7 @@ Then commit atomically: consume the challenge, store the counter, insert the nul
 
 | Package | What | Stack |
 |---|---|---|
-| `knock-wedgie` (separate repo) | Knock app: Safe Signer fork + `knock_*`, screens, pure-Python QR encoder, Human badge, activity dot | MicroPython, `wedgie.json` (`usb: true`) |
+| `getknock/wedgie` (separate repo) | Knock app: Safe Signer fork + `knock_*`, screens, pure-Python QR encoder, Human badge, activity dot | MicroPython, `wedgie.json` (`usb: true`) |
 | `packages/protocol` | `@knock-dev/protocol`: EIP-712 types and digests, key, signal, action and namehash helpers, P-256 verify; generates `spec/vectors/v1.json` (`bun run vectors`) | TypeScript, viem, @noble/curves, Bun (`bun test`) |
 | `apps/door` | Door + Console + Revoke page (client-only) | TypeScript, Next.js, Web Serial, viem |
 | `apps/bouncer` | Demo dApp: humans-only claim, live checklist, bot script | TypeScript, Next.js |
@@ -144,7 +145,7 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - Gas key for `knockd` on World Chain: **funded** (~0.001 ETH, checked on chain), key in `.env` (gitignored).
 - Wallet: one wallet is controller, `addr` target, and revoker (D9).
 - Parent name: `itzraj.eth`, on ENSv2, available.
-- Repos: `getknock/knock` and `getknock/knock-wedgie`, both private (D10).
+- Repos: `getknock/knock` and `getknock/wedgie`, both private (D10).
 
 ## 9. Sources
 
@@ -162,3 +163,4 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-06** – User: make the app's icon as an SVG, then PNGs at several sizes. Door with knock lines, picked over two door-knocker versions (D16).
 - **2026-11-06** – User: use Bun. Bun workspaces, `bun test` and `bun.lock` replace npm, vitest and tsx (D11). Same 13 tests pass; vectors unchanged.
 - **2026-11-06** – User: `WORLD_APP_ID` / `WORLD_RP_ID` are in `.env`. Use the `getknock` org, private repos for now: created `getknock/knock` and `getknock/knock-wedgie` and pushed `main` (D10).
+- **2026-11-06** – User: no personal addresses anywhere public, ENS names and the addresses they resolve to excepted, and the home path written as `$HOME` (D18). Removed the Safe owner address from the Wedgie facts (§4), wrote the home folder's path as `$HOME`, rewrote every commit (re-signed) and force-pushed. Renamed `getknock/knock-wedgie` to `getknock/wedgie`.
