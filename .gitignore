@@ -7,3 +7,4 @@ target/
 out/
 cache/
 .next/
+!.env.example

@@ -19,7 +19,7 @@ A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe
 
 | # | Decision |
 |---|---|
-| D1 | Chain roles: **ENSv2 on Ethereum mainnet, launched** (identity + status; user-confirmed, verify on day one, see R1) and **World ID 4.0 + `KnockBinding` on World Chain mainnet (480)** (humanity). Sepolia ENSv2 is the fallback and for rehearsal. |
+| D1 | Chain roles: **ENSv2 on Ethereum mainnet, launched** (identity + status; verified live on 2026-11-06, see §4) and **World ID 4.0 + `KnockBinding` on World Chain mainnet (480)** (humanity). Sepolia ENSv2 is the fallback and for rehearsal. |
 | D2 | World ID on-chain verification uses World's **`WorldIDVerifier`**: prod `0x00000000009E00F9FE82CfeeBB4556686da094d7`, staging `0x703a6316c975DEabF30b637c155edD53e24657DB` (both chain 480). Confirmed on docs.world.org. |
 | D3 | The user has a **physical Wedgie**. The virtual wedgie (`wedgie.dev/virtual`, `/code`) is for fast screen iteration and as a fallback. |
 | D4 | Backend in **Rust** (axum, alloy, idkit-core): `knockd` (signer), `server/verifier`, `crates/knock-verify`. |
@@ -28,7 +28,12 @@ A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe
 | D7 | Frontend: **Next.js** for everything (Door, Console, Revoke page, Bouncer), deployed or local. |
 | D8 | IPFS / reproducible Door build is **deferred**. Keep the Door client-only (no server runtime) so a static export stays possible. |
 | D9 | **One wallet.** The user's wallet is the ENS controller, the address the device name resolves to (`addr`), and the wallet allowed to revoke. No separate phone wallet or custom role for now. |
-| D10 | The Knock app lives in its **own public GitHub repo** (installed via wedgie.dev/connect). This repo is the monorepo for everything else. |
+| D10 | The Knock app lives in its **own public GitHub repo** (installed via wedgie.dev/connect). This repo is the monorepo for everything else. Locally it's `$HOME/knock-wedgie`: a full-history clone of `clawdbotatg/wedgie-safe` with `origin` renamed to `upstream`. The GitHub repo gets created later, only with the user's OK. |
+| D11 | **npm workspaces** (pnpm isn't installed; no global installs). |
+| D12 | The Knock app is a **fork of Safe Signer that keeps `"mod": "safe"`**, with display name "Knock". It's a drop-in replacement: saves stay in `/saves/safe/`, wedgie.dev/safe keeps working, and the diff stays small for upstream merges. New code goes in `safe_knock.py`, loaded per request like `safe_msg`, and `safe_qr.py`. The manifest requires every file to be `safe.py` or start with `safe_`. |
+| D13 | **QR encoded on the device**: pure Python, byte mode, ECC M, version ≤ 13 (69 modules × 3 px), **fixed mask** (no penalty scoring) to save CPU and RAM. Fallback: the host sends the module bitmap. |
+| D14 | Rust workspace and Next.js apps are created when first needed (M3/M4). Use the Universal Resolver proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`. |
+| D15 | Every npm package uses the **`@knock-dev`** scope: `@knock-dev/protocol`, `@knock-dev/door-sdk`, … |
 
 ## 3. Design essentials
 
@@ -67,20 +72,31 @@ Then commit atomically: consume the challenge, store the counter, insert the nul
 
 **Revocation**: the user's wallet sets `knock.status = revoked` (one mainnet tx). A revoked key never returns; a new device needs a new chip. Binding a new device does not cut off the old one, only revoking does.
 
-## 4. Facts verified (2026-11-05)
+## 4. Facts verified (2026-11-05/06)
 
 - **World ID 4.0 on-chain**: `IWorldIDVerifier.verify(nullifier, action, rpId, nonce, signalHash, expiresAtMin, issuerSchemaId, credentialGenesisIssuedAtMin, uint256[5] proof) external view`; it reverts on failure. `action = uint256(keccak256(bytes(action))) >> 8`. Docs recommend an upgradeable proxy for the consumer. `world-id-protocol` `contracts/deployments/core/production.json` lists `worldIDVerifier` proxy `0x…09E00F9F…94d7`, `worldIDRegistry` `0x0000000000aE079e…67d4`, `rpRegistry` `0xD9A213A9…5BbC`. The docs do not define a proof validity window; only `expires_at_min` is passed through. Proofs must be bound soon after they're made, because Merkle roots age.
 - **ENSv2 mainnet contracts** (docs.ens.domains/learn/deployments): ETH Registry `0xf60aba43…85e2`, Root Registry `0x2553c09b…a91e`, ETH Registrar `0xd6d8369e…cc81`, Universal Resolver V2 `0x06fdd07f…cfd5`, Verifiable Factory `0x77510ba1…30d2`, Permissioned Resolver impl `0x565b0f45…57c5`, User Registry impl `0xfaa23592…8d72`. Sepolia equivalents are on the same page. That page said resolution stays on ENSv1 "until the launch completes"; the user says the launch is done (R1).
 - **ENSv2 EAC**: `grantRoles/revokeRoles` per name, `grantRootRoles/revokeRootRoles` contract-wide; `ROLE_REGISTRAR = 1<<0`, `ROLE_RENEW = 1<<16`; fuses are replaced by roles. Subname creation is `register(label, owner, subregistry, resolver, roleBitmap, expiry)` on the parent's `UserRegistry` (deployed through the Verifiable Factory; `initialize` must include `ROLE_REGISTRAR_ADMIN` and `ROLE_RENEW_ADMIN`), then `setSubregistry(parentLabelhash, userRegistry)` on the parent's registry. Permissioned Resolver setters take DNS-encoded names. Never cache token IDs or resolvers (`findTokenId` at write time). Min libs: viem ≥ 2.35.0, ENSjs ≥ 5.2.5 for ENSv2 writes.
 - **Wedgie**: Trust M is P-256 only. `c.sign(slot, digest)` signs a digest as given. The factory key's Infineon cert is readable via `c.read(optiga.CERT)`. Apps need `"usb": true` for their own protocol. Saves are readable by any plugged-in computer (public data only). A GitHub-installed app is unsigned with full device access, and any app can use the chip. Web Serial: Chrome/Edge only, one holder of the port at a time.
 - **IDKit v4**: the connect URL is exposed as `connectorURI`. Production actions work only with the real World App; staging only with the Simulator.
-- **Not yet read**: wedgie `safe.md`, `security.md`, `virtual.md`, the Safe Signer source (`clawdbotatg/wedgie-safe`; Knock is built on it), and docs.world.org RP-signature pages. Needed before M1/M3.
+- **Checked on chain (2026-11-06)**:
+  - **ENSv2 is live**: the root registry's `eth` points at the v2 ETH Registry `0xf60a…85e2`. `ur.integration-tests.eth` returns `0x2222…` through both the UR proxy and `0x06fd…cfd5`.
+  - **`itzraj.eth`**: not in the v1 registry. In v2 it has resolver `0x5516Dd167987b425942e49541BB0e5cc17CCeBDa`, resolves to `0xdffbfc54c6863e6e5ba271e2f0e15fb5d1efe499`, and has **no subregistry yet**.
+  - **World**: both `WorldIDVerifier` proxies have code on chain 480. The relayer (gas key) holds ~0.001 ETH; gas is ~0.0015 gwei.
+- **The user's Wedgie**: firmware 0.3.76, MicroPython 1.29.0, RP2040, OPTIGA Trust M. Runs Safe Signer `safe-59` with its key locked. Sealed. **~74 KB RAM free** at idle.
+- **Safe Signer** (`clawdbotatg/wedgie-safe`, upstream `safe-63`):
+  - `safe.py` `handle(m)` dispatches on `type`. Rare features are modules imported per request and dropped after (`safe_msg`). Big modules ship as `.mpy`, built by `tools/mpy.sh` (`uv` + `mpy-cross==1.29.0.post2`).
+  - Reusable: `sign(digest)` (chip, low-s); `_screen(...)` (question page: ignores presses for 600 ms, times out at 120 s, physical keys only); `W.send`, `W.hello`, `draw_home()`, `save.*`, `safe_keccak.keccak256`.
+  - `safe_msg.prove` gives the factory-key signature over `sha256("wedgie safe key\0" + X + Y)` plus the Infineon cert: the future `knock.att`.
+- **Dev loop** (wedgie-dev `public/wedgie.py`, served at wedgie.dev/wedgie.py): `hello`, `install .` (installs the app in the current folder through full access; a red question, then a green press), `run file.py`, `debug`. Recovery: hold both grey buttons while plugging in to boot with no app, then reinstall Safe Signer from wedgie.dev/connect.
+- **Not yet read**: docs.world.org RP-signature pages (needed for M3).
 
 ## 5. Components and stack
 
 | Package | What | Stack |
 |---|---|---|
 | `knock-wedgie` (separate repo) | Knock app: Safe Signer fork + `knock_*`, screens, pure-Python QR encoder, Human badge, activity dot | MicroPython, `wedgie.json` (`usb: true`) |
+| `packages/protocol` | `@knock-dev/protocol`: EIP-712 types and digests, key, signal, action and namehash helpers, P-256 verify; generates `spec/vectors/v1.json` (`npm run vectors`) | TypeScript, viem, @noble/curves, vitest |
 | `apps/door` | Door + Console + Revoke page (client-only) | TypeScript, Next.js, Web Serial, viem |
 | `apps/bouncer` | Demo dApp: humans-only claim, live checklist, bot script | TypeScript, Next.js |
 | `packages/door-sdk` | `knock({challenge, mode})`: opens the Door popup, returns the assertion | TypeScript |
@@ -97,7 +113,7 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 
 | Hours | Block | Done when |
 |---|---|---|
-| 0–2 | **M0 Setup**: monorepo skeleton (pnpm, Foundry, Cargo), read Safe Signer source + `safe.md`/`security.md`, ENS day-one check (R1), check that `knockd` can load its RP + gas keys, write `spec/` and test vectors for the 4 EIP-712 digests | repo builds, vectors agree in TS |
+| 0–2 | **M0 Setup**: npm workspace and `@knock-dev/protocol` (Foundry, Cargo and Next.js come when first needed, D14), read the Safe Signer source, ENS day-one check (R1), check the RP and gas keys, test vectors for the 4 EIP-712 digests in `spec/vectors/v1.json` | tests pass, vectors agree in TS (viem + a hand-rolled encoder) |
 | 2–10 | **M1 Wedgie app**: fork Safe Signer; `knock_hello`, `knock_pass` with press/counter/state machine, screens, QR encoder, then `knock_enroll`/`knock_bind`/`knock_confirm`, Human badge. Real hardware | `wedgie.py` shows a signed `knock_pass` after a green press; Safe Signer still works |
 | 6–12 | **M2 `KnockBinding`** (parallel): Foundry tests, fork test with a Simulator proof, deploy staging (then prod), measure gas | `bind()` emits `Bound` on chain 480 staging |
 | 10–18 | **M3 `knockd` + Console**: `/rp-context`, `/sign-bind`, IDKit with the QR on the Wedgie, bind tx, ENS subname + records (Sepolia first, then mainnet) | one real enrollment end to end, Human badge on device |
@@ -109,8 +125,8 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 
 ## 7. Risks
 
-- **R1 (low) – ENSv2 live status.** The user says ENSv2 is launched and `itzraj.eth` is on ENSv2 and available. Day-one check (10 min): resolve `ur.integration-tests.eth` (expect `0x2222…2222`) and read `itzraj.eth`'s registry. Verifier chain config supports mainnet and Sepolia. Reconcile the Universal Resolver address before hardcoding: one source gives proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`, the deployments page lists `0x06fd…cfd5`.
-- **R2 – Units.** World's `expires_at_min` is in **minutes**; other times are seconds. A `Bound` log's expiry check ("zero or later than now") must convert explicitly, and tests must cover it.
+- **R1 (resolved 2026-11-06) – ENSv2 live status.** Verified on chain: ENSv2 is live and `itzraj.eth` is in the v2 registry (facts in §4). Both Universal Resolver addresses answer correctly; we use the proxy (D14). The verifier's chain config still supports Sepolia as a fallback.
+- **R2 (corrected) – Expiry units.** World's `expires_at_min` / `expiresAtMin` is a **Unix-seconds lower bound**: "min" means minimum, not minutes (World's own example is `1756166400`). The `Bound` expiry check ("zero or later than now") compares seconds with no conversion. Tests should still cover the boundary.
 - **R3 – Built on Safe Signer.** The app must keep every `safe_*` request working and pin a Safe Signer version. Forks drift. First task in M1: read the source.
 - **R4 – World production vs staging.** Real World App users need a production action. Develop against staging + Simulator. Never accept staging deployments in a production verifier.
 - **R5 – 36 hours.** The core loop (M1–M5) comes first; see the cut order.
@@ -118,14 +134,15 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **R7 – Honest limits (keep in the README)**: no PIN on the Wedgie (a thief can knock until revoked); proof farming is not solved; the shared public nullifier is linkable across sites in Bound mode; installed apps can use the chip (S1 vs S2); the origin is "unverified" on the device; the Wedgie is not an audited hardware wallet.
 - **R8 – Door origin.** Web Serial permission is per origin, and the port is exclusive (the Door and `wedgie.dev/safe` can't run together).
 - **R9 – One wallet for controller and revoker** (D9) means a compromised wallet can both rename and revoke, and there's no separate low-power revoke key. Acceptable for now; revisit with a status-only role if time allows.
+- **R10 – Wedgie RAM.** Only ~74 KB is free at idle. Knock code goes in per-request modules shipped as `.mpy` (the `safe_msg` pattern), and the QR uses a fixed mask (D13). Check free RAM with `wedgie.py debug` after each new message.
 
 ## 8. Inputs and status
 
-- World RP (`rp_id` + signing key): **provided by the user** in a local JSON key file (gitignored). `knock-bind` action in staging + prod: to confirm in M0.
-- Gas key for `knockd` on World Chain: **funded with ~$2**, key in `.env` (gitignored).
+- World RP signing key: **provided** in a local JSON key file (gitignored). It holds only the key (`privateKey` + its address), **not** the `app_id` or `rp_id`. Those still need to go in `.env` as `WORLD_APP_ID` / `WORLD_RP_ID` (names in `.env.example`) before M2, because `rp_id` is baked into `KnockBinding` at deploy. The `knock-bind` action in staging + prod: still to confirm.
+- Gas key for `knockd` on World Chain: **funded** (~0.001 ETH, checked on chain), key in `.env` (gitignored).
 - Wallet: one wallet is controller, `addr` target, and revoker (D9).
 - Parent name: `itzraj.eth`, on ENSv2, available.
-- Wedgie app repo: separate public repo (D10); name TBD (`knock-wedgie` proposed).
+- Wedgie app repo: separate public repo (D10), local at `$HOME/knock-wedgie`; the GitHub name is TBD (`knock-wedgie` proposed).
 
 ## 9. Sources
 
@@ -139,3 +156,4 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-05** – User answers: ENSv2 launched; World ID has an on-chain verifier (confirmed, D2); physical Wedgie; Rust backend, Foundry, Next.js; user-chosen names and multiple devices. Added the detailed design (§3), risks, and a first schedule.
 - **2026-11-05** – IPFS deferred, Next.js everywhere (D7/D8); `itzraj.eth` available on ENSv2; deadline 36 hours; Anon-RPC demoted to stretch; 36-hour schedule and cut order added.
 - **2026-11-06** – User: World RP keys are in a local JSON file; gas key funded (~$2) in `.env`; one wallet is controller, `addr` target and revoker (D9); Wedgie app gets its own repo (D10). Cleaned the repo and its history; secrets are gitignored and never committed.
+- **2026-11-06** – M0: added `@knock-dev/protocol` (EIP-712 digests, helpers, P-256 verify) and `spec/vectors/v1.json`; viem and a hand-rolled encoder agree, 13 tests pass. Verified ENSv2 live and `itzraj.eth` in v2 (R1 resolved). Corrected R2 (`expires_at_min` is a seconds lower bound). Read the Wedgie and Safe Signer; decided the fork approach (D10–D14) and added R10 (RAM). User: use the `@knock-dev` npm scope (D15).

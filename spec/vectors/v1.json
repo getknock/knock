@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "note": "Knock v1 test vectors. The key is a published test key: never use it for anything real.",
+  "domain": {
+    "name": "Knock",
+    "version": "1",
+    "typeHash": "0xb03948446334eb9b2196d5eb166f69b9d49403eb4a12f36de8d3f9f3cb8e15c3",
+    "separator": "0x47b77a4882834bcbf202625b6b3b8d7f93cbe3103183e91ba66bf49467062424"
+  },
+  "key": {
+    "secret": "0x616e1f52ee0eb0af25f4ca4ae76c032985f095e85186c2444cf14a58fbc0b4ac",
+    "x": "0x90f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd",
+    "y": "0xa06f92c6f12059592b8081fb065b4e1a22688867a0f16c8e6124d00615cf3f10",
+    "compressed": "0x0290f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd",
+    "keyHash": "0x671f5e17aee9ef2f21079d4bc7d8038a6f436d58ff1bf64b716c1673260503e0",
+    "signal": "0x0290f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd",
+    "signalHash": "0x00946c85bbeedac52d4f003085eace92310960481790ec16c2cbe350341436d0"
+  },
+  "action": {
+    "name": "knock-bind",
+    "hash": "0x0078fe652308f1e1b32627be3473d9fd4affd1e01a0e418fb0be6dfb8093601f"
+  },
+  "device": {
+    "name": "wedgie.itzraj.eth",
+    "node": "0xbd3a7fbbd8fe245754eeea615a60590c4f9f5650ec24c4a6250b171c5b85ebb8"
+  },
+  "structs": {
+    "KnockHello": {
+      "type": "KnockHello(bytes32 challenge)",
+      "typeHash": "0x5ca778f7e070a2dc5cc6f6d4eb63587563b18be43f9b32e0cea1f75011510915",
+      "message": {
+        "challenge": "0xa5240775396be40f08b2a7c6261e114951b4291ee2425ad18a23633585801683"
+      },
+      "structHash": "0x643913430288799f1ea363615394bd9ac386b6d667433f3d2fe1230270d05ec8",
+      "digest": "0xf5a39b4c197896672e61955eb65d8fe8065b8cb46a06013b4bad1e9e83fcbcd1",
+      "r": "0x3ea54d9c0105e39eea482dc47d51533276cc61eda26159abb5e414a1d9d34e1f",
+      "s": "0x644fb5a917c6c920ed2bfef14a5ecf9826155141bb2b21083a4c3fb70594d484"
+    },
+    "KnockEnroll": {
+      "type": "KnockEnroll(bytes32 nonce,string name,bytes key)",
+      "typeHash": "0x21509bf6b7c96731a3d1a5b2c7787488f36192bedad01ba201dfa71ebb7e1824",
+      "message": {
+        "nonce": "0xe2c269137bd9a8ac84e3584ec6d5cd41ca6f61a43cf93e3ece87c371c393301c",
+        "name": "wedgie.itzraj.eth",
+        "key": "0x0290f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd"
+      },
+      "structHash": "0x84182bd8436e99179d0991884a3744f6259486b47a900723d434a5dafc4b6061",
+      "digest": "0x2b007e64171c2b345cab43f4c17c41653f45a892bfe60246532f5e0e87491207",
+      "r": "0x8884f233444e897e3f4a7ad195e48125fa2b18570c22c186e2d7f48ceb0a5ba2",
+      "s": "0x18eafd46cd932224864452d6fbee5ef0a1033b5ee65c2683aa8f1a9bf5fca524"
+    },
+    "KnockBind": {
+      "type": "KnockBind(uint256 chainId,address registry,uint256 nullifier,uint64 expiresAtMin,bytes key)",
+      "typeHash": "0xdd2890ed054aba6305aaf9f3dcbd451eb1d1eaa77ee4b41f74b92fe74871cd2e",
+      "message": {
+        "chainId": 480,
+        "registry": "0x1234567890123456789012345678901234567890",
+        "nullifier": "0x00f0725f7d4133d975cb84cfb8e95bdfb34af90d2072ceb527e66790d841bbe6",
+        "expiresAtMin": "0x000000000000000000000000000000000000000000000000000000006b36ec80",
+        "key": "0x0290f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd"
+      },
+      "structHash": "0xbc106b713d64052c227aede5b5394eecaa4b15ce85089ed64c807fc6139a61a4",
+      "digest": "0x7550d189f16e0667401c6769eaa7bbc8e03499736294d93e7554a6dece49358f",
+      "r": "0xfb6767853390d77875b9e1735a5e6cd3f38dfc402c4872adf76cfa34a118b7b7",
+      "s": "0x4ed4dc55e46bc67ca3499f2a2fc1950ee9913d41c8e716fe45b85c05039858d6"
+    },
+    "KnockPass": {
+      "type": "KnockPass(bytes32 challenge,string origin,bytes32 deviceNode,uint64 counter,uint8 mode,uint256 nullifier,bytes32 humanRef)",
+      "typeHash": "0x2875d4369017eae3332ea29c97efa4a7dae4fe088fc7754b5ed721c9feb9334e",
+      "message": {
+        "challenge": "0xd6369ae40244602165cbe5f8458f20a3acc6895d4ca12185c013e99f3556ce64",
+        "origin": "https://bouncer.example",
+        "deviceNode": "0xbd3a7fbbd8fe245754eeea615a60590c4f9f5650ec24c4a6250b171c5b85ebb8",
+        "counter": 42,
+        "mode": 1,
+        "nullifier": "0x00f0725f7d4133d975cb84cfb8e95bdfb34af90d2072ceb527e66790d841bbe6",
+        "humanRef": "0x0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "structHash": "0xd2177ea4590690bffacc23f2ef08d5517b7d193a4ee54a7cd2a0e507e8221dbf",
+      "digest": "0x02def6c85b0674abac128dc72f30226a4c2c1617c9c54ae6f39dccd063306cc5",
+      "r": "0xe0207b5fc6f89806b2ad4445ed6346becff33311a68f0d315db5367965299c5a",
+      "s": "0x01f6a63758339f5ef4041e4165981646273f5293594914ada786cf8433549d23"
+    }
+  }
+}
