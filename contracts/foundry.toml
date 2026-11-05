@@ -1,0 +1,23 @@
+[profile.default]
+src = "src"
+test = "test"
+script = "script"
+libs = ["dependencies"]
+solc = "0.8.30"
+evm_version = "cancun"      # World Chain runs Cancun and later; nothing newer is needed
+via_ir = true               # D5
+optimizer = true
+optimizer_runs = 10000
+fs_permissions = [{ access = "read", path = "../spec/vectors" }]
+remappings = [
+    "@openzeppelin/contracts/=dependencies/@openzeppelin-contracts-5.4.0/",
+    "forge-std/=dependencies/forge-std-1.11.0/src/",
+]
+
+[soldeer]
+remappings_location = "config"
+recursive_deps = false
+
+[dependencies]
+forge-std = "1.11.0"
+"@openzeppelin-contracts" = "5.4.0"

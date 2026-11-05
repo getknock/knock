@@ -8,3 +8,5 @@ out/
 cache/
 .next/
 !.env.example
+contracts/dependencies/
+broadcast/
