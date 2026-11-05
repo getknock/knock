@@ -34,6 +34,7 @@ A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe
 | D13 | **QR encoded on the device**: pure Python, byte mode, ECC M, version ≤ 13 (69 modules × 3 px), **fixed mask** (no penalty scoring) to save CPU and RAM. Fallback: the host sends the module bitmap. |
 | D14 | Rust workspace and Next.js apps are created when first needed (M3/M4). Use the Universal Resolver proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`. |
 | D15 | Every npm package uses the **`@knock-dev`** scope: `@knock-dev/protocol`, `@knock-dev/door-sdk`, … |
+| D16 | **Icon**: a yellow door in a black frame, black knob, white knock lines, on a violet label (`#6e56cf`). The source of truth is the 12×12 cart grid in knock-wedgie's `wedgie.json`. `tools/icon_svg.py` there makes `assets/icon.svg`; `resvg -w N -h N` makes `assets/icon/icon-N.png` for N = 16, 32, 48, 64, 96, 128, 192, 256, 512, 1024 (multiples of 16, so the pixels stay square). |
 
 ## 3. Design essentials
 
@@ -157,3 +158,4 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-05** – IPFS deferred, Next.js everywhere (D7/D8); `itzraj.eth` available on ENSv2; deadline 36 hours; Anon-RPC demoted to stretch; 36-hour schedule and cut order added.
 - **2026-11-06** – User: World RP keys are in a local JSON file; gas key funded (~$2) in `.env`; one wallet is controller, `addr` target and revoker (D9); Wedgie app gets its own repo (D10). Cleaned the repo and its history; secrets are gitignored and never committed.
 - **2026-11-06** – M0: added `@knock-dev/protocol` (EIP-712 digests, helpers, P-256 verify) and `spec/vectors/v1.json`; viem and a hand-rolled encoder agree, 13 tests pass. Verified ENSv2 live and `itzraj.eth` in v2 (R1 resolved). Corrected R2 (`expires_at_min` is a seconds lower bound). Read the Wedgie and Safe Signer; decided the fork approach (D10–D14) and added R10 (RAM). User: use the `@knock-dev` npm scope (D15).
+- **2026-11-06** – User: make the app's icon as an SVG, then PNGs at several sizes. Door with knock lines, picked over two door-knocker versions (D16).
