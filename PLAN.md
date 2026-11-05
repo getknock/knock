@@ -132,7 +132,7 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **R1 (resolved 2026-11-06) – ENSv2 live status.** Verified on chain: ENSv2 is live and `itzraj.eth` is in the v2 registry (facts in §4). Both Universal Resolver addresses answer correctly; we use the proxy (D14). The verifier's chain config still supports Sepolia as a fallback.
 - **R2 (corrected) – Expiry units.** World's `expires_at_min` / `expiresAtMin` is a **Unix-seconds lower bound**: "min" means minimum, not minutes (World's own example is `1756166400`). The `Bound` expiry check ("zero or later than now") compares seconds with no conversion. Tests should still cover the boundary.
 - **R3 (eased by D12) – Built from Safe Signer's parts.** Knock copies a few pieces (the line reader, the screens and their press rules, low-s signing) from upstream `safe-63` instead of tracking a fork, so there's nothing to merge. Fixes upstream, like its press-rule audits, are worth re-reading now and then.
-- **R4 – World production vs staging.** Real World App users need a production action. Develop against staging + Simulator. Never accept staging deployments in a production verifier.
+- **R4 – World production vs staging.** Real World App users need a production action. Develop against staging + Simulator. Never accept staging deployments in a production verifier. The IDKit `environment`, the action's environment and Simulator-or-real-app must all match: a staging action with the real World App silently produces no proof (World's SKILL.md). Production is ready (§8); a staging run needs its own `knock-bind` action first.
 - **R5 – 36 hours.** The core loop (M1–M5) comes first; see the cut order.
 - **R6 – Gas key balance is ~$2.** Fine for staging binds (a fraction of a cent each), but watch it; rate limits in `knockd` bound the damage if it leaks.
 - **R7 – Honest limits (keep in the README)**: no PIN on the Wedgie (a thief can knock until revoked); proof farming is not solved; the shared public nullifier is linkable across sites in Bound mode; installed apps can use the chip (S1 vs S2); the origin is "unverified" on the device; the Wedgie is not an audited hardware wallet.
@@ -145,7 +145,11 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 ## 8. Inputs and status
 
 - World RP signing key: **provided** in a local JSON key file (gitignored). It holds only the key (`privateKey` + its address).
-- World `app_id` / `rp_id`: **provided** in `.env` as `WORLD_APP_ID` (`app_…`) / `WORLD_RP_ID` (`rp_…`), gitignored. `rp_id` is baked into `KnockBinding` at deploy (M2). The `knock-bind` action in staging + prod: still to confirm.
+- World `app_id` / `rp_id`: **provided** in `.env` as `WORLD_APP_ID` (`app_…`) / `WORLD_RP_ID` (`rp_…`), gitignored. `rp_id` is baked into `KnockBinding` at deploy (M2). Checked through the World Developer Portal MCP (2026-11-06):
+  - The app ("Knock") is a **production** app, not a staging one.
+  - Its RP is managed and `registered` in both the production and the staging registry.
+  - The **`knock-bind` action exists in production**, so nothing needs promoting.
+  - There's no staging `knock-bind` action yet. One call creates it (`create_world_id_action`, `environment: "staging"`), needed only for Simulator runs (R4).
 - Gas key for `knockd` on World Chain: **funded** (~0.001 ETH, checked on chain), key in `.env` (gitignored).
 - Wallet: one wallet is controller, `addr` target, and revoker (D9).
 - Parent name: `itzraj.eth`, on ENSv2, available.
@@ -155,6 +159,7 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 
 - https://wedgie.dev/skill.md, /code.md, /trustm.md, /usb.md
 - https://docs.world.org/world-id/SKILL.md, /world-id/idkit/integrate, /world-id/idkit/onchain-verification; github.com/worldcoin/world-id-protocol `contracts/deployments/core/production.json`
+- The World Developer Portal MCP (`https://developer.world.org/api/mcp`, configured for this project): `get_team_context`, `get_app_config`
 - https://docs.ens.domains/llms-full.txt (first 100k of ~1.8M chars), /ensv2/enhanced-access-control, /ensv2/tutorial-contract-developers, /learn/deployments
 
 ## 10. Changelog (prompts and decisions)
@@ -169,3 +174,5 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-06** – User: `WORLD_APP_ID` / `WORLD_RP_ID` are in `.env`. Use the `getknock` org, private repos for now: created `getknock/knock` and `getknock/knock-wedgie` and pushed `main` (D10).
 - **2026-11-06** – User: no personal addresses anywhere public, ENS names and the addresses they resolve to excepted, and the home path written as `$HOME` (D18). Removed the Safe owner address from the Wedgie facts (§4), wrote the home folder's path as `$HOME`, rewrote every commit (re-signed) and force-pushed. Renamed `getknock/knock-wedgie` to `getknock/wedgie`.
 - **2026-11-06** – User: Knock gets its own app and its own key, not Safe Signer's (D12 reworked, D17, R11). Wrote the app in `getknock/wedgie`: `mod` `knock`; a key in `KEY3`/`KEY4` made only in a free slot the person said yes to (R12); `knock_hello`, `knock_pass` and `knock_confirm`. Offline tests check the vectors, the slots on a pretend Trust M and the requests on pretend firmware (94 checks), and they fail on each of seven deliberately broken copies.
+- **2026-11-06** – Added `tools/knock_check.py` in `getknock/wedgie`, for the same checks on the real chip; it passed a dry run against a pretend wedgie.
+- **2026-11-06** – User: is the World action in staging or production (use the World MCP), and how do we make it production? Checked through the Developer Portal MCP: `knock-bind` is a production action of a production app, and its RP is registered in both environments, so nothing needs promoting. A staging action is needed only for Simulator runs (§8, R4).
