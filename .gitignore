@@ -10,3 +10,5 @@ cache/
 !.env.example
 contracts/dependencies/
 broadcast/
+next-env.d.ts
+*.tsbuildinfo
