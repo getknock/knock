@@ -1,0 +1,13 @@
+{
+  "chainId": 480,
+  "production": {
+    "KnockBinding": "0xB1f8B9c895428d6a0e1f82b0A326BdB357192132",
+    "WorldIDVerifier": "0x00000000009E00F9FE82CfeeBB4556686da094d7",
+    "block": 37290206
+  },
+  "staging": {
+    "KnockBinding": "0x639e41f70CbD1F1395BaC76De427D1469B46B190",
+    "WorldIDVerifier": "0x703a6316c975DEabF30b637c155edD53e24657DB",
+    "block": 37290197
+  }
+}
