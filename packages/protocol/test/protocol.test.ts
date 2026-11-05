@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'bun:test'
 import { type Hex, concat, hexToBytes, keccak256, pad, stringToBytes, toHex } from 'viem'
 import {
   ACTION_HASH,

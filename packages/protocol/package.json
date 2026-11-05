@@ -7,8 +7,8 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "test": "vitest run",
-    "vectors": "tsx src/vectors.ts --write",
+    "test": "bun test",
+    "vectors": "bun src/vectors.ts --write",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -16,9 +16,7 @@
     "viem": "^2.57.16"
   },
   "devDependencies": {
-    "@types/node": "^26.6.6",
-    "tsx": "^4.23.15",
-    "typescript": "^7.0.2",
-    "vitest": "^5.1.0"
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
   }
 }

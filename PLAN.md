@@ -2,7 +2,7 @@
 
 > Prove you're a human with one press of a button on a device you own. Your Wedgie vouches for "wallet address; with humanity".
 
-Status: **planning only** (no code yet). This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. The changelog is at the bottom.
+Status: **M0 done** (`@knock-dev/protocol`, test vectors, icon); **M1 in progress** (the Wedgie app). This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. The changelog is at the bottom.
 
 Principle: fun first. Practicality (testnet faucets, airdrops, humans-only pages) is a bonus. Over-engineering is explicitly OK.
 
@@ -29,7 +29,7 @@ A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe
 | D8 | IPFS / reproducible Door build is **deferred**. Keep the Door client-only (no server runtime) so a static export stays possible. |
 | D9 | **One wallet.** The user's wallet is the ENS controller, the address the device name resolves to (`addr`), and the wallet allowed to revoke. No separate phone wallet or custom role for now. |
 | D10 | The Knock app lives in its **own public GitHub repo** (installed via wedgie.dev/connect). This repo is the monorepo for everything else. Locally it's `$HOME/knock-wedgie`: a full-history clone of `clawdbotatg/wedgie-safe` with `origin` renamed to `upstream`. The GitHub repo gets created later, only with the user's OK. |
-| D11 | **npm workspaces** (pnpm isn't installed; no global installs). |
+| D11 | **Bun workspaces** (the user's choice): `bun install` writes `bun.lock`, tests run on `bun test`, and root scripts run `bun run --filter '@knock-dev/*' <script>`. No global installs. |
 | D12 | The Knock app is a **fork of Safe Signer that keeps `"mod": "safe"`**, with display name "Knock". It's a drop-in replacement: saves stay in `/saves/safe/`, wedgie.dev/safe keeps working, and the diff stays small for upstream merges. New code goes in `safe_knock.py`, loaded per request like `safe_msg`, and `safe_qr.py`. The manifest requires every file to be `safe.py` or start with `safe_`. |
 | D13 | **QR encoded on the device**: pure Python, byte mode, ECC M, version ≤ 13 (69 modules × 3 px), **fixed mask** (no penalty scoring) to save CPU and RAM. Fallback: the host sends the module bitmap. |
 | D14 | Rust workspace and Next.js apps are created when first needed (M3/M4). Use the Universal Resolver proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`. |
@@ -97,7 +97,7 @@ Then commit atomically: consume the challenge, store the counter, insert the nul
 | Package | What | Stack |
 |---|---|---|
 | `knock-wedgie` (separate repo) | Knock app: Safe Signer fork + `knock_*`, screens, pure-Python QR encoder, Human badge, activity dot | MicroPython, `wedgie.json` (`usb: true`) |
-| `packages/protocol` | `@knock-dev/protocol`: EIP-712 types and digests, key, signal, action and namehash helpers, P-256 verify; generates `spec/vectors/v1.json` (`npm run vectors`) | TypeScript, viem, @noble/curves, vitest |
+| `packages/protocol` | `@knock-dev/protocol`: EIP-712 types and digests, key, signal, action and namehash helpers, P-256 verify; generates `spec/vectors/v1.json` (`bun run vectors`) | TypeScript, viem, @noble/curves, Bun (`bun test`) |
 | `apps/door` | Door + Console + Revoke page (client-only) | TypeScript, Next.js, Web Serial, viem |
 | `apps/bouncer` | Demo dApp: humans-only claim, live checklist, bot script | TypeScript, Next.js |
 | `packages/door-sdk` | `knock({challenge, mode})`: opens the Door popup, returns the assertion | TypeScript |
@@ -114,7 +114,7 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 
 | Hours | Block | Done when |
 |---|---|---|
-| 0–2 | **M0 Setup**: npm workspace and `@knock-dev/protocol` (Foundry, Cargo and Next.js come when first needed, D14), read the Safe Signer source, ENS day-one check (R1), check the RP and gas keys, test vectors for the 4 EIP-712 digests in `spec/vectors/v1.json` | tests pass, vectors agree in TS (viem + a hand-rolled encoder) |
+| 0–2 | **M0 Setup**: Bun workspace and `@knock-dev/protocol` (Foundry, Cargo and Next.js come when first needed, D14), read the Safe Signer source, ENS day-one check (R1), check the RP and gas keys, test vectors for the 4 EIP-712 digests in `spec/vectors/v1.json` | tests pass, vectors agree in TS (viem + a hand-rolled encoder) |
 | 2–10 | **M1 Wedgie app**: fork Safe Signer; `knock_hello`, `knock_pass` with press/counter/state machine, screens, QR encoder, then `knock_enroll`/`knock_bind`/`knock_confirm`, Human badge. Real hardware | `wedgie.py` shows a signed `knock_pass` after a green press; Safe Signer still works |
 | 6–12 | **M2 `KnockBinding`** (parallel): Foundry tests, fork test with a Simulator proof, deploy staging (then prod), measure gas | `bind()` emits `Bound` on chain 480 staging |
 | 10–18 | **M3 `knockd` + Console**: `/rp-context`, `/sign-bind`, IDKit with the QR on the Wedgie, bind tx, ENS subname + records (Sepolia first, then mainnet) | one real enrollment end to end, Human badge on device |
@@ -159,3 +159,4 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-06** – User: World RP keys are in a local JSON file; gas key funded (~$2) in `.env`; one wallet is controller, `addr` target and revoker (D9); Wedgie app gets its own repo (D10). Cleaned the repo and its history; secrets are gitignored and never committed.
 - **2026-11-06** – M0: added `@knock-dev/protocol` (EIP-712 digests, helpers, P-256 verify) and `spec/vectors/v1.json`; viem and a hand-rolled encoder agree, 13 tests pass. Verified ENSv2 live and `itzraj.eth` in v2 (R1 resolved). Corrected R2 (`expires_at_min` is a seconds lower bound). Read the Wedgie and Safe Signer; decided the fork approach (D10–D14) and added R10 (RAM). User: use the `@knock-dev` npm scope (D15).
 - **2026-11-06** – User: make the app's icon as an SVG, then PNGs at several sizes. Door with knock lines, picked over two door-knocker versions (D16).
+- **2026-11-06** – User: use Bun. Bun workspaces, `bun test` and `bun.lock` replace npm, vitest and tsx (D11). Same 13 tests pass; vectors unchanged.

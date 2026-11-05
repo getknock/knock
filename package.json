@@ -7,7 +7,8 @@
     "apps/*"
   ],
   "scripts": {
-    "test": "npm test --workspaces --if-present",
-    "vectors": "npm run vectors -w @knock-dev/protocol"
+    "test": "bun run --filter '@knock-dev/*' test",
+    "typecheck": "bun run --filter '@knock-dev/*' typecheck",
+    "vectors": "bun run --filter @knock-dev/protocol vectors"
   }
 }
