@@ -2,13 +2,13 @@
 
 > Prove you're a human with one press of a button on a device you own. Your Wedgie vouches for "wallet address; with humanity".
 
-Status: **M0 done** (`@knock-dev/protocol`, test vectors, icon); **M1 in progress** (the Wedgie app). This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. The changelog is at the bottom.
+Status: **M0 done** (`@knock-dev/protocol`, test vectors, icon); **M1 in progress**: the Knock app is written and tested offline in `getknock/wedgie`; next, the device session. This file is the living plan. It gets updated whenever the user prompts, gives info, or decisions change. The changelog is at the bottom.
 
 Principle: fun first. Practicality (testnet faucets, airdrops, humans-only pages) is a bonus. Over-engineering is explicitly OK.
 
 ## 1. Summary
 
-A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe Signer + `knock_*` messages).
+A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app**: its own small Wedgie app, built from Safe Signer's parts, with its own key (D12, D17).
 
 - **Setup, once**: bind the device key to a World ID 4.0 nullifier through a stateless `KnockBinding` contract on World Chain (it emits `Bound`). Then name the device in ENSv2 (`wedgie.itzraj.eth`) with `knock.*` records pointing at that binding.
 - **A knock**: a dApp opens the **Door** popup → the Wedgie shows the origin + KNOCK → green press → a signed `KnockPass`.
@@ -30,23 +30,24 @@ A Wedgie (Pico + 240x240 LCD + Trust M secure chip) runs the **Knock app** (Safe
 | D9 | **One wallet.** The user's wallet is the ENS controller, the address the device name resolves to (`addr`), and the wallet allowed to revoke. No separate phone wallet or custom role for now. |
 | D10 | Repos live in the **`getknock`** GitHub org, **private for now**. `getknock/knock` is this monorepo. `getknock/wedgie` (renamed from `knock-wedgie`) is the Wedgie app; locally `$HOME/knock-wedgie`, which keeps Safe Signer's history with `upstream` = `clawdbotatg/wedgie-safe`. Until it's public, the app installs with `wedgie.py install .`. Making either repo public needs the user's OK, and first a fresh repo from clean history (D18). |
 | D11 | **Bun workspaces** (the user's choice): `bun install` writes `bun.lock`, tests run on `bun test`, and root scripts run `bun run --filter '@knock-dev/*' <script>`. No global installs. |
-| D12 | The Knock app is a **fork of Safe Signer that keeps `"mod": "safe"`**, with display name "Knock". It's a drop-in replacement: saves stay in `/saves/safe/`, wedgie.dev/safe keeps working, and the diff stays small for upstream merges. New code goes in `safe_knock.py`, loaded per request like `safe_msg`, and `safe_qr.py`. The manifest requires every file to be `safe.py` or start with `safe_`. |
+| D12 | The Knock app is **its own small app**: `"mod": "knock"`, display name "Knock", built from Safe Signer's parts (the line reader, the question screens and their press rules, low-s signing; MIT). It replaces the earlier plan of a Safe Signer fork that kept `"mod": "safe"` (dropped for D17). Saves live in `/saves/knock/`. Files are `knock.py` and `knock_*` (`knock_key`, `knock_knock`, `knock_keccak`; `knock_qr` to come), and each request's code is loaded only for it. The manifest says `"chip": "OPTIGA Trust M"`, `"usb": true`. Safe Signer stays the official app. A wedgie runs one app at a time and keeps every app's saves, so going back is one install from the shelf, with its key and Safes as they were. While Knock runs, wedgie.dev/safe doesn't answer. |
 | D13 | **QR encoded on the device**: pure Python, byte mode, ECC M, version ≤ 13 (69 modules × 3 px), **fixed mask** (no penalty scoring) to save CPU and RAM. Fallback: the host sends the module bitmap. |
 | D14 | Rust workspace and Next.js apps are created when first needed (M3/M4). Use the Universal Resolver proxy `0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`. |
 | D15 | Every npm package uses the **`@knock-dev`** scope: `@knock-dev/protocol`, `@knock-dev/door-sdk`, … |
 | D16 | **Icon**: a yellow door in a black frame, black knob, white knock lines, on a violet label (`#6e56cf`). The source of truth is the 12×12 cart grid in `getknock/wedgie`'s `wedgie.json`. `tools/icon_svg.py` there makes `assets/icon.svg`; `resvg -w N -h N` makes `assets/icon/icon-N.png` for N = 16, 32, 48, 64, 96, 128, 192, 256, 512, 1024 (multiples of 16, so the pixels stay square). |
+| D17 | **Knock's own key, never Safe Signer's.** A P-256 key made on the device (A, then a green press) in Trust M `KEY3`, or in `KEY4` when `KEY3` holds a key. Nothing in the app names `KEY2` (Safe Signer's, per trustm.md). It **never replaces a key**: a slot is made into only when it's free (not locked, set up for P-256 signing or not at all, and a test signature gets "no such object" or "bad parameter"). A key that signs, rules that say no, another curve, or any other answer leaves the slot alone. The key goes in the slot the person said yes to, probed again right before `genkey`. Its public key is kept in the save and checked with a fresh signature at every start. **Not locked** for now: a lifecycle of 07 can't be undone; locking may come with binding. The factory key vouches for it (`sha256("wedgie knock key\0" + X + Y)` plus the Infineon cert: `knock.att`). No request signs bytes from the host: every signature is over a Knock EIP-712 digest the device builds itself. |
 | D18 | **Nothing personal in public files** (repo files, commit messages, anything pushed). No wallet, Safe, signer, relayer or device-key addresses, and no home-folder paths (write `$HOME`). The only exceptions are ENS names and the addresses ENS names resolve to. Public protocol contracts (World ID, ENS, Safe Signer's tokens) are not personal and stay. A slip gets the history rewritten and force-pushed. GitHub can keep force-pushed-away commits reachable by hash, so a repo goes public only as a fresh repo pushed from clean history. |
 
 ## 3. Design essentials
 
-**Trust model**: one P-256 key (Safe Signer's locked key, Trust M slot `KEY2`, public key in `DATA[11]`); three independent authorities:
+**Trust model**: one P-256 key, Knock's own: made on the device in Trust M slot `KEY3` (or `KEY4`), never Safe Signer's `KEY2` (D17). Its public key is in the app's save and in ENS (`knock.key`). Three independent authorities:
 1. **Identity** = ENSv2 records on the device name.
 2. **Humanity** = a `Bound` event on World Chain.
 3. **Presence** = the device signs the site's fresh challenge after a physical green press.
 
 Knock never touches funds.
 
-**Wire (Wedgie ↔ Door)**: JSON lines over USB serial, ≤ 6 KB each, `id` echoed. Messages: `knock_hello` → `knock_info`; `knock_qr` (draw a URI as QR, no signing); `knock_bind` → `knock_bind_sig` (press); `knock_enroll` → `knock_enrolled` (press); `knock_confirm` (stores name, status, nullifier, expiry, PoH pointer; drives the badge); `knock_pass` → `knock_pass_sig` (press); `knock_cancel`. Errors: `bad_request, busy, rejected, timeout, cancelled, not_enrolled, already_enrolled, too_large, internal`. The app keeps answering the firmware's `hello`/`ping` and adds `"knock": 1`; every `safe_*` request keeps working.
+**Wire (Wedgie ↔ Door)**: JSON lines over USB serial, ≤ 6 KB each, `id` echoed. Messages: `knock_hello` → `knock_info`; `knock_qr` (draw a URI as QR, no signing); `knock_bind` → `knock_bind_sig` (press); `knock_enroll` → `knock_enrolled` (press); `knock_confirm` (stores name, status, nullifier, expiry, PoH pointer; drives the badge); `knock_pass` → `knock_pass_sig` (press); `knock_cancel`. Errors are `knock_error {error, why}` with `error` one of `bad_request, busy, rejected, timeout, cancelled, not_enrolled, already_enrolled, no_key, too_large, internal`. The app keeps answering the firmware's `hello`/`ping` and adds `"knock": 1`, `knock_state` (`ok|none|lost|nochip`), `knock_key` and, until there's a key, `knock_slots`. Done so far: `knock_hello`, `knock_pass`, `knock_confirm`.
 
 **Device rules**: states IDLE / PROMPT / QR / SIGNING. No signing without a physical green press made after the prompt is fully shown; presses in the first 0.6 s and USB-simulated presses are ignored. Red, 120 s of silence, or `knock_cancel` return to IDLE. The device computes every digest itself from fields it parsed. A monotonic counter is incremented and stored before every `knock_pass` reply. The device has no clock. Screens name the action in words (BECOME, BIND, KNOCK), the device name, and the origin labelled "unverified". Never show button letters.
 
@@ -85,6 +86,7 @@ Then commit atomically: consume the challenge, store the counter, insert the nul
   - **ENSv2 is live**: the root registry's `eth` points at the v2 ETH Registry `0xf60a…85e2`. `ur.integration-tests.eth` returns `0x2222…` through both the UR proxy and `0x06fd…cfd5`.
   - **`itzraj.eth`**: not in the v1 registry. In v2 it has resolver `0x5516Dd167987b425942e49541BB0e5cc17CCeBDa`, resolves to `0xdffbfc54c6863e6e5ba271e2f0e15fb5d1efe499`, and has **no subregistry yet**.
   - **World**: both `WorldIDVerifier` proxies have code on chain 480. The relayer (gas key) holds ~0.001 ETH; gas is ~0.0015 gwei.
+- **Trust M slots** (wedgie.dev/trustm.md): `KEY2` and `DATA[11]` are Safe Signer's. Every other app gets `KEY3`/`KEY4` (empty from the factory), checks the slot isn't locked, and says in its README which it takes. As shipped, any program can use or replace a key in `KEY2`–`KEY4` (`genkey` replaces, no undo); only a lifecycle of 07 locks a slot, for good. Errors carry `optiga.Error.code` (0x07: access rules say no). The code a signature gets from an empty slot isn't documented (R12).
 - **The user's Wedgie**: firmware 0.3.76, MicroPython 1.29.0, RP2040, OPTIGA Trust M. Runs Safe Signer `safe-59` with its key locked. Sealed. **~74 KB RAM free** at idle.
 - **Safe Signer** (`clawdbotatg/wedgie-safe`, upstream `safe-63`):
   - `safe.py` `handle(m)` dispatches on `type`. Rare features are modules imported per request and dropped after (`safe_msg`). Big modules ship as `.mpy`, built by `tools/mpy.sh` (`uv` + `mpy-cross==1.29.0.post2`).
@@ -97,7 +99,7 @@ Then commit atomically: consume the challenge, store the counter, insert the nul
 
 | Package | What | Stack |
 |---|---|---|
-| `getknock/wedgie` (separate repo) | Knock app: Safe Signer fork + `knock_*`, screens, pure-Python QR encoder, Human badge, activity dot | MicroPython, `wedgie.json` (`usb: true`) |
+| `getknock/wedgie` (separate repo) | Knock app (`mod` `knock`): its own key in `KEY3`/`KEY4` (`knock_key`), the `knock_*` requests (`knock_knock`), screens, Human badge; pure-Python QR encoder and activity dot to come. `tools/knock_test.py` checks it with no device | MicroPython, `wedgie.json` (`usb: true`); tests on CPython |
 | `packages/protocol` | `@knock-dev/protocol`: EIP-712 types and digests, key, signal, action and namehash helpers, P-256 verify; generates `spec/vectors/v1.json` (`bun run vectors`) | TypeScript, viem, @noble/curves, Bun (`bun test`) |
 | `apps/door` | Door + Console + Revoke page (client-only) | TypeScript, Next.js, Web Serial, viem |
 | `apps/bouncer` | Demo dApp: humans-only claim, live checklist, bot script | TypeScript, Next.js |
@@ -116,7 +118,7 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 | Hours | Block | Done when |
 |---|---|---|
 | 0–2 | **M0 Setup**: Bun workspace and `@knock-dev/protocol` (Foundry, Cargo and Next.js come when first needed, D14), read the Safe Signer source, ENS day-one check (R1), check the RP and gas keys, test vectors for the 4 EIP-712 digests in `spec/vectors/v1.json` | tests pass, vectors agree in TS (viem + a hand-rolled encoder) |
-| 2–10 | **M1 Wedgie app**: fork Safe Signer; `knock_hello`, `knock_pass` with press/counter/state machine, screens, QR encoder, then `knock_enroll`/`knock_bind`/`knock_confirm`, Human badge. Real hardware | `wedgie.py` shows a signed `knock_pass` after a green press; Safe Signer still works |
+| 2–10 | **M1 Wedgie app**: the Knock app from Safe Signer's parts with its own key (D12, D17); `knock_hello`, `knock_pass` with press and counter, `knock_confirm`, Human badge, offline tests (done); then the device session, `knock_enroll`/`knock_bind`, the QR encoder. Real hardware | `wedgie.py` shows a signed `knock_pass` after a green press; Safe Signer's key untouched (reinstalled, same signer) |
 | 6–12 | **M2 `KnockBinding`** (parallel): Foundry tests, fork test with a Simulator proof, deploy staging (then prod), measure gas | `bind()` emits `Bound` on chain 480 staging |
 | 10–18 | **M3 `knockd` + Console**: `/rp-context`, `/sign-bind`, IDKit with the QR on the Wedgie, bind tx, ENS subname + records (Sepolia first, then mainnet) | one real enrollment end to end, Human badge on device |
 | 18–26 | **M4 Door + `door-sdk` + verifier**: popup protocol, V1–V8, atomic commit, revoke path | a site accepts a knock and rejects a revoked one |
@@ -129,14 +131,16 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 
 - **R1 (resolved 2026-11-06) – ENSv2 live status.** Verified on chain: ENSv2 is live and `itzraj.eth` is in the v2 registry (facts in §4). Both Universal Resolver addresses answer correctly; we use the proxy (D14). The verifier's chain config still supports Sepolia as a fallback.
 - **R2 (corrected) – Expiry units.** World's `expires_at_min` / `expiresAtMin` is a **Unix-seconds lower bound**: "min" means minimum, not minutes (World's own example is `1756166400`). The `Bound` expiry check ("zero or later than now") compares seconds with no conversion. Tests should still cover the boundary.
-- **R3 – Built on Safe Signer.** The app must keep every `safe_*` request working and pin a Safe Signer version. Forks drift. First task in M1: read the source.
+- **R3 (eased by D12) – Built from Safe Signer's parts.** Knock copies a few pieces (the line reader, the screens and their press rules, low-s signing) from upstream `safe-63` instead of tracking a fork, so there's nothing to merge. Fixes upstream, like its press-rule audits, are worth re-reading now and then.
 - **R4 – World production vs staging.** Real World App users need a production action. Develop against staging + Simulator. Never accept staging deployments in a production verifier.
 - **R5 – 36 hours.** The core loop (M1–M5) comes first; see the cut order.
 - **R6 – Gas key balance is ~$2.** Fine for staging binds (a fraction of a cent each), but watch it; rate limits in `knockd` bound the damage if it leaks.
 - **R7 – Honest limits (keep in the README)**: no PIN on the Wedgie (a thief can knock until revoked); proof farming is not solved; the shared public nullifier is linkable across sites in Bound mode; installed apps can use the chip (S1 vs S2); the origin is "unverified" on the device; the Wedgie is not an audited hardware wallet.
 - **R8 – Door origin.** Web Serial permission is per origin, and the port is exclusive (the Door and `wedgie.dev/safe` can't run together).
 - **R9 – One wallet for controller and revoker** (D9) means a compromised wallet can both rename and revoke, and there's no separate low-power revoke key. Acceptable for now; revisit with a status-only role if time allows.
-- **R10 – Wedgie RAM.** Only ~74 KB is free at idle. Knock code goes in per-request modules shipped as `.mpy` (the `safe_msg` pattern), and the QR uses a fixed mask (D13). Check free RAM with `wedgie.py debug` after each new message.
+- **R10 (eased by D12) – Wedgie RAM.** ~74 KB was free at idle under Safe Signer. Knock is much smaller (~29 KB of source across four files), and its request code loads only for a request (`knock_knock`, `knock_key`). `tools/mpy.sh` builds `.mpy` files if RAM gets tight, and the QR uses a fixed mask (D13). Measure with `wedgie.py debug` in the device session and after each new message.
+- **R11 (resolved by D17) – A shared Safe key.** Signing Knock messages with Safe Signer's `KEY2` key would have put the user's Safe signer key on chain and in ENS next to `itzraj.eth`, linking the Safe to the name in public, and a bug in a Knock screen could have signed Safe data. Knock has its own key instead, and never names `KEY2`.
+- **R12 – An empty slot's answer is unknown.** trustm.md doesn't say which error code a signature gets from an empty slot. Knock treats only "no such object" / "bad parameter" as empty, and refuses to make a key on any other answer (it shows as `error 0x..` in `knock_slots`). The device session reads `knock_slots` before anything is made; if a slot shows `error`, add that code to `knock_key.EMPTY` only if it's clearly "no key".
 
 ## 8. Inputs and status
 
@@ -164,3 +168,4 @@ T0 = when the deadline was given (2026-11-05). Commit at the end of each block. 
 - **2026-11-06** – User: use Bun. Bun workspaces, `bun test` and `bun.lock` replace npm, vitest and tsx (D11). Same 13 tests pass; vectors unchanged.
 - **2026-11-06** – User: `WORLD_APP_ID` / `WORLD_RP_ID` are in `.env`. Use the `getknock` org, private repos for now: created `getknock/knock` and `getknock/knock-wedgie` and pushed `main` (D10).
 - **2026-11-06** – User: no personal addresses anywhere public, ENS names and the addresses they resolve to excepted, and the home path written as `$HOME` (D18). Removed the Safe owner address from the Wedgie facts (§4), wrote the home folder's path as `$HOME`, rewrote every commit (re-signed) and force-pushed. Renamed `getknock/knock-wedgie` to `getknock/wedgie`.
+- **2026-11-06** – User: Knock gets its own app and its own key, not Safe Signer's (D12 reworked, D17, R11). Wrote the app in `getknock/wedgie`: `mod` `knock`; a key in `KEY3`/`KEY4` made only in a free slot the person said yes to (R12); `knock_hello`, `knock_pass` and `knock_confirm`. Offline tests check the vectors, the slots on a pretend Trust M and the requests on pretend firmware (94 checks), and they fail on each of seven deliberately broken copies.
