@@ -4,8 +4,8 @@ Last checked: **2026-11-07**. This is the release list, in deadline order. `PLAN
 
 ## Critical path
 
-- [ ] **Commit and push the code and docs.** The Human Club's World ID + wallet flow (D35), its brand assets, and the docs update must be on their repos' `main` branches before Vercel can serve them.
-- [ ] **Let Vercel deploy, then check the deployments.** The Console/Door, docs and Human Club should each finish without a new environment setting. The club creates its new `world_sessions` table itself; there is no manual database migration.
+- [x] **Commit and push the code and docs** (2026-11-07). The Human Club's World ID + wallet flow (D35) and its brand assets are on `getknock/knock`'s `main` (`1b0da32`), and the docs update is on `getknock/docs`'s `main` (`b5fc12f`).
+- [x] **Let Vercel deploy, then check the deployments** (2026-11-07). The new club deployment serves `/in` (it answered 404 before the push and 200 after), and the docs serve the updated Human Club and testing pages. No new environment setting was needed, and there is no manual database migration.
 - [ ] **Run the live Human Club smoke test** at `https://club.getknock.dev`, with a wallet and World App:
   1. Come in with World ID and a wallet, making the first Knock binding.
   2. Do a second act, proving the returning World ID session without signing the wallet in again.
@@ -30,9 +30,9 @@ Last checked: **2026-11-07**. This is the release list, in deadline order. `PLAN
 
 ## Deploy and verify
 
-1. Push `getknock/knock` and `getknock/docs`. Vercel deploys their configured projects; the Wedgie repo has no change to release.
-2. Confirm the intended production deployments are ready, not merely queued or building.
-3. Check every public route again:
+1. Push `getknock/knock` and `getknock/docs`. Vercel deploys their configured projects; the Wedgie repo has no change to release. **Done 2026-11-07.**
+2. Confirm the intended production deployments are ready, not merely queued or building. **Done:** the club's `/in` route is live, which only the new build serves.
+3. Check every public route again. **Done 2026-11-07:** `getknock.dev`, `door.getknock.dev/knock`, `docs.getknock.dev`, the docs' Human Club and testing pages, `club.getknock.dev`, `/in`, `/fundraisers`, `/start` and `/me` all answer 200; `knockd`'s `/health` is `ok: true` with `signs: true` on chain 480; `frame-ancestors 'none'` is still on the Console and the Door.
 
    ```bash
    curl -fI https://getknock.dev
@@ -42,9 +42,9 @@ Last checked: **2026-11-07**. This is the release list, in deadline order. `PLAN
    curl -f https://knockd.getknock.dev/health
    ```
 
-4. Check the club's new pages and API exist in production: `/in`, `/api/world/wallet`, `/api/world/ask` and `/api/world/proof`. Do not send a real proof to a route just to see whether it exists.
+4. Check the club's new pages and API exist in production: `/in`, `/api/world/wallet`, `/api/world/ask` and `/api/world/proof`. Do not send a real proof to a route just to see whether it exists. **Done:** empty POSTs answer 400, 400 and 403, not 404.
 5. Run the live Human Club and real-hardware smoke tests above. Watch Vercel's function logs and Fly's logs while doing them; do not print tokens, RP keys, gas keys or session secrets.
-6. Re-check the docs' Human Club and knockd pages on the deployed docs site.
+6. Re-check the docs' Human Club and knockd pages on the deployed docs site. **Done 2026-11-07:** the Human Club page carries the World ID and wallet wording.
 
 ### Production settings
 
