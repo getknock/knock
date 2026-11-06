@@ -32,16 +32,42 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 export type RpContext = { rp_id: string; nonce: string; created_at: number; expires_at: number; signature: string }
 
-/** A World ID request for knock-bind, signed by Knock's RP key, with the app it's for. */
-export function rpContext() {
-  return post<{ app_id: `app_${string}`; action: string; rp_context: RpContext }>('/rp-context', {
-    action: 'knock-bind',
+/**
+ * A World ID request signed by Knock's RP key, with the app it's for: for a human's first binding, a uniqueness
+ * proof for the deployment's action (D24); for a binding by their session, a session proof, which names no action.
+ */
+export function rpContext(env: Environment, session: boolean) {
+  return post<{ app_id: `app_${string}`; action: string | null; rp_context: RpContext }>('/rp-context', {
+    environment: env,
+    session,
   })
+}
+
+/** World ID's id for a session: `session_`, then its commitment and oprf seed in hex. */
+export type SessionId = `session_${string}`
+
+/** A human Knock knows: their nullifier for the first binding's action, and the session that binding started. */
+export type Human = { nullifier: Hex; session: SessionId }
+
+/** The human's session as KnockBinding has it, by their nullifier or by a session; null when it has none. */
+export async function human(env: Environment, by: { nullifier: Hex } | { session: SessionId }): Promise<Human | null> {
+  try {
+    const h = await post<{ nullifier: Hex; session: SessionId }>('/human', { environment: env, ...by })
+    return { nullifier: h.nullifier, session: h.session }
+  } catch (e) {
+    if (e instanceof Refused && e.error === 'no_session') return null
+    throw e
+  }
 }
 
 export type BindBody = {
   environment: Environment
+  /** A first binding's proof's nullifier, or the session's human a session proof binds for. */
   nullifier: string
+  /** The session the first binding started, or the one the session proof proved. */
+  session: SessionId
+  /** A session proof's session nullifier and the random action it was made for: a binding by session. */
+  sessionNullifier?: [string, string]
   nonce: string
   expiresAtMin: number
   issuerSchemaId: number
@@ -66,9 +92,12 @@ export type Bound = {
   bound: { nullifier: Hex; keyHash: Hex; node: Hex; expiresAtMin: number }
 }
 
+/** A binding knockd sent: the human's first, or one by their session, and the session either way. */
+export type Sent = Bound & { first: boolean; session: SessionId }
+
 /** The binding, checked by knockd (the device's signature, then World ID in a simulation) and sent. */
 export function bind(body: BindBody) {
-  return post<Bound>('/bind', body)
+  return post<Sent>('/bind', body)
 }
 
 export type BindingOnChain = Omit<Bound, 'gasUsed'>

@@ -248,6 +248,51 @@ h2 {
   font-size: 0.875rem;
 }
 
+/* Who's binding: a returning human's session, or a first binding */
+.who {
+  display: grid;
+  gap: 0.75rem;
+  justify-items: start;
+  margin: 0 0 2rem;
+  padding: 0.875rem 1rem;
+  border-radius: 14px;
+  background: var(--deep);
+}
+
+.who p {
+  margin: 0;
+  font-size: 0.9375rem;
+}
+
+.find {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.find input {
+  flex: 1 1 14rem;
+  min-width: 0;
+  padding: 0.55rem 0.8rem;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--violet);
+  color: var(--white);
+  font: inherit;
+  font-family: var(--mono), ui-monospace, monospace;
+  font-size: 0.875rem;
+}
+
+.find input::placeholder {
+  color: #d9d1f799;
+}
+
+.find input:focus-visible {
+  outline: none;
+  border-color: var(--door);
+}
+
 .steps {
   margin: 0 0 2rem;
   padding: 0;

@@ -12,4 +12,10 @@ export const KNOCK_BINDING: Record<Environment, Address> = {
   production: deployments.production.KnockBinding as Address,
 }
 
+/** The World ID action a human's first binding proves there: one per deployment, proved once per human (D24). */
+export const ACTION: Record<Environment, string> = {
+  staging: deployments.staging.action,
+  production: deployments.production.action,
+}
+
 export const EXPLORER = 'https://worldscan.org'

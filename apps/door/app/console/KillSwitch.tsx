@@ -73,6 +73,7 @@ export function KillSwitch(props: {
         For a lost Wedgie, or one you're done with. Your wallet unregisters its name and unlinks the records. Its
         binding was made for that name only, so from then on no site takes its knocks, under any name. If the Wedgie is
         here, it forgets its name and binding too. The binding stays in World Chain's history, but counts for nothing.
+        You stay you: bind this Wedgie again, or another, and World App proves your Knock session for it.
       </p>
 
       <h3>Your wallet</h3>
