@@ -30,7 +30,7 @@ export default async function Me() {
         <p className="lede">
           In the club since <When at={who.firstAt} />, through the door {who.knocks.toLocaleString('en')}{' '}
           {who.knocks === 1 ? 'time' : 'times'}. Whichever of your Wedgies knocks, or World App proves you, the club
-          counts the same human.
+          counts you as the same human.
         </p>
       </section>
 

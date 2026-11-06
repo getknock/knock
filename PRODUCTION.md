@@ -14,7 +14,7 @@ Last checked: **2026-11-07**. This is the release list, in deadline order. `PLAN
   5. Close that fundraiser with World ID.
 - [x] **Finish M4 with real hardware** (2026-11-07, the user): a real Wedgie knock gets into the Human Club; a revoked or killed test name does not.
 - [x] **Try the Console's installer on a real Wedgie** (D37, 2026-11-07, the user): install or update from `getknock/wedgie`'s latest commit, then run a knock.
-- [ ] **Publish the npm packages** when the account's two-factor authentication is available; see below. This does not block the sites.
+- [x] **Publish the npm packages** (2026-11-07): `@knock-dev/protocol`, `@knock-dev/verify` and `@knock-dev/door-sdk` are on npm at 0.1.0, and the docs install them from there.
 - [ ] **Submit Knock's prepared World App listing for review**, only after the user's explicit OK. This does not block the sites either.
 
 ## Verified locally
@@ -53,9 +53,9 @@ Last checked: **2026-11-07**. This is the release list, in deadline order. `PLAN
 - **Docs:** static export; no secrets.
 - **knockd:** keep one always-on machine and its existing RP and gas secrets. Its health answer must keep `ok: true` and `signs: true`.
 
-## npm, when 2FA is ready
+## npm
 
-The staged packages are in `out/npm/`. Publish in dependency order, supplying the account's one-time code when npm asks:
+Published 2026-11-07 as `0.1.0`, in this order. The staged packages stay in `out/npm/`; `bun scripts/npm.ts --check` re-verifies them:
 
 ```bash
 npm publish out/npm/protocol --access public
@@ -63,7 +63,7 @@ npm publish out/npm/verify --access public
 npm publish out/npm/door-sdk --access public
 ```
 
-Then install each from npm in a fresh directory and check its version is `0.1.0`. Update the docs' "Where Knock is today" note only after all three are publicly installable.
+Then installed each from npm in a fresh directory and checked its version is `0.1.0`. The docs' "Where Knock is today" note and the quickstart now install from npm, and the docs' 26 tests pass.
 
 ## Not release blockers
 

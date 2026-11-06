@@ -296,7 +296,7 @@ export function WorldWay({ w, list, round }: { w: World; list: boolean; round: n
             <p>
               <strong>Scan it with {p.asked.environment === 'staging' ? "World ID's Simulator" : 'World App'}.</strong>{' '}
               {p.asked.kind === 'enroll'
-                ? "It proves you're a unique human. Then Knock binds you for this wallet on World Chain, as it binds a Wedgie, so you're one human here whichever way you come in."
+                ? "It proves you're a unique human. Then Knock binds this wallet to you on World Chain, the way it binds a Wedgie, so the club counts you once."
                 : `It proves you're the human Knock knows, for this one act, as ${p.asked.name}.`}
             </p>
             <a className="plain" href={p.link}>

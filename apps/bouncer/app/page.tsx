@@ -16,7 +16,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
         <h1 id="club">The Human Club</h1>
         <p className="lede">
           Petitions only humans can sign, and fundraisers only humans can start. Each human signs once, with one press
-          on their Wedgie or a proof in World App, and the club learns nothing about them but a name.
+          on their Wedgie or a proof in World App, and the club asks for no email, name or password.
         </p>
         {t.signatures > 0 ? (
           <p className="tally">
