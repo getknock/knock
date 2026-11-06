@@ -6,7 +6,9 @@
 //! s low), has World ID's verifier check the human's in a simulation, and only then sends, the gas key paying. A
 //! binding that would fail costs nothing.
 //!
-//! POST /human: a human's session, as KnockBinding has it, for the Console to bind a returning human's Wedgie by.
+//! POST /human: a human's session, as KnockBinding has it, for the Console to bind a returning human's Wedgie by:
+//! found by their nullifier, a session id, a Wedgie's key (the human it was last bound to, its name killed or not)
+//! or a name's node (the human it was last bound for). So any browser finds it.
 
 use crate::{App, CHAIN_ID, Env, Refusal, rp::hash_to_field, word};
 use alloy::contract::SolCallBuilder;
@@ -35,6 +37,8 @@ sol! {
         function action() external view returns (string);
         function sessions(uint256 commitment) external view returns (uint256 nullifier, uint256 oprfSeed);
         function sessionOf(uint256 nullifier) external view returns (uint256);
+        function humanOfKey(bytes32 keyHash) external view returns (uint256);
+        function humanOfName(bytes32 node) external view returns (uint256);
         function bindDigest(uint256 nullifier, uint64 expiresAtMin, bytes32 x, bytes32 y) external view returns (bytes32);
         function bind(uint256 nullifier, uint256 nonce, uint64 expiresAtMin, uint64 issuerSchemaId,
             uint256 genesisIssuedAtMin, uint256[5] calldata proof, uint256 commitment, uint256 oprfSeed, bytes32 x,
@@ -438,34 +442,80 @@ pub struct HumanRequest {
     nullifier: Option<Num>,
     #[serde(default)]
     session: Option<String>,
+    /// A Wedgie's compressed key: the human it was last bound to.
+    #[serde(default)]
+    key: Option<String>,
+    /// A name's node: the human it was last bound for.
+    #[serde(default)]
+    node: Option<String>,
 }
 
-/// POST /human: a human's World ID session with Knock, as KnockBinding has it: by their nullifier (their latest
-/// session), or by a session id (whose it is). Not secret: only the human's World ID can prove a session.
+/// POST /human: a human's World ID session with Knock, as KnockBinding has it, found one of four ways: by their
+/// nullifier (their latest session), a session id (whose it is), a Wedgie's key or a name's node (the human it was
+/// last bound to or for). Not secret: only the human's World ID can prove a session.
 pub async fn human(
     State(app): State<Arc<App>>,
     Json(q): Json<HumanRequest>,
 ) -> Result<Json<Value>, Refusal> {
     let env = app.env(&q.environment)?;
-    let commitment = match (&q.nullifier, &q.session) {
-        (Some(_), None) => None,
-        (None, Some(s)) => Some(
+    let ways = [
+        q.nullifier.is_some(),
+        q.session.is_some(),
+        q.key.is_some(),
+        q.node.is_some(),
+    ];
+    if ways.iter().filter(|w| **w).count() != 1 {
+        return Err(Refusal::bad("one of nullifier, session, key or node"));
+    }
+    let session = match &q.session {
+        Some(s) => Some(
             parse_session(s)
                 .ok_or_else(|| Refusal::bad("session: session_ and 128 hex digits"))?
                 .0,
         ),
-        _ => return Err(Refusal::bad("a nullifier or a session, one of them")),
+        None => None,
+    };
+    let key_hash = match &q.key {
+        Some(k) => {
+            let key = bytes_of(k, 33, "key")?;
+            let (_, x, y) =
+                device_key(&key).ok_or_else(|| Refusal::bad("key: a compressed P-256 key"))?;
+            Some(keccak256([x.as_slice(), y.as_slice()].concat()))
+        }
+        None => None,
+    };
+    let node = match &q.node {
+        Some(n) => Some(B256::from_slice(&bytes_of(n, 32, "node")?)),
+        None => None,
     };
     app.lookups.take()?;
     let kb = KnockBinding::new(env.binding, &app.chain);
-    let commitment = match (commitment, &q.nullifier) {
-        (Some(c), _) => c,
-        (None, Some(n)) => kb
-            .sessionOf(n.0)
-            .call()
-            .await
-            .map_err(|e| chain_trouble(&app, "reading the human's session", e))?,
-        (None, None) => unreachable!(),
+    let commitment = match session {
+        Some(c) => c,
+        None => {
+            let nullifier = if let Some(n) = &q.nullifier {
+                n.0
+            } else if let Some(h) = key_hash {
+                kb.humanOfKey(h)
+                    .call()
+                    .await
+                    .map_err(|e| chain_trouble(&app, "reading the key's human", e))?
+            } else if let Some(n) = node {
+                kb.humanOfName(n)
+                    .call()
+                    .await
+                    .map_err(|e| chain_trouble(&app, "reading the name's human", e))?
+            } else {
+                unreachable!("one way was given")
+            };
+            if nullifier.is_zero() {
+                return Err(no_session(env));
+            }
+            kb.sessionOf(nullifier)
+                .call()
+                .await
+                .map_err(|e| chain_trouble(&app, "reading the human's session", e))?
+        }
     };
     if commitment.is_zero() {
         return Err(no_session(env));

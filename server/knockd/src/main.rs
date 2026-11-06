@@ -402,7 +402,7 @@ async fn main() -> anyhow::Result<()> {
         contexts: Window::new(120, Duration::from_secs(3600)),
         simulations: Window::new(120, Duration::from_secs(3600)),
         sends: Window::new(12, Duration::from_secs(3600)),
-        lookups: Window::new(120, Duration::from_secs(3600)),
+        lookups: Window::new(600, Duration::from_secs(3600)),
         sending: tokio::sync::Mutex::new(()),
     };
     if std::env::var("KNOCKD_SKIP_CHECKS").is_err() {
