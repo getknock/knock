@@ -5,9 +5,10 @@ import {Script} from "forge-std/Script.sol";
 import {KnockBinding, IWorldIDVerifier} from "../src/KnockBinding.sol";
 
 /// Deploys KnockBinding on World Chain (480) against World ID 4.0's verifier: production, or staging with
-/// KNOCK_STAGING=true (Simulator proofs only, R4). The RP is WORLD_RP_ID ("rp_" and 16 hex digits), the gas key
-/// RELAYER_WALLET_PRIV_KEY: both from the repo's .env, never committed. Without --broadcast it only simulates.
-///   forge script script/DeployKnockBinding.s.sol --rpc-url "$WORLD_RPC" [--broadcast]
+/// KNOCK_STAGING=true (Simulator proofs only, R4). First bindings prove KNOCK_ACTION, which no human has proved
+/// for Knock before (D24). The RP is WORLD_RP_ID ("rp_" and 16 hex digits), the gas key RELAYER_WALLET_PRIV_KEY:
+/// both from the repo's .env, never committed. Without --broadcast it only simulates.
+///   KNOCK_ACTION=knock-human forge script script/DeployKnockBinding.s.sol --rpc-url "$WORLD_RPC" [--broadcast]
 contract DeployKnockBinding is Script {
     // world-id-protocol, contracts/deployments/core/{production,staging}.json: the WorldIDVerifier proxies (D2)
     address constant PRODUCTION = 0x00000000009E00F9FE82CfeeBB4556686da094d7;
@@ -17,8 +18,10 @@ contract DeployKnockBinding is Script {
         require(block.chainid == 480, "World Chain (480) only");
         bool staging = vm.envOr("KNOCK_STAGING", false);
         uint64 rp = rpId(vm.envString("WORLD_RP_ID"));
+        string memory action = vm.envString("KNOCK_ACTION");
+        require(bytes(action).length > 0, "KNOCK_ACTION: the action first bindings prove");
         vm.startBroadcast(vm.envUint("RELAYER_WALLET_PRIV_KEY"));
-        kb = new KnockBinding(IWorldIDVerifier(staging ? STAGING : PRODUCTION), rp);
+        kb = new KnockBinding(IWorldIDVerifier(staging ? STAGING : PRODUCTION), rp, action);
         vm.stopBroadcast();
     }
 
