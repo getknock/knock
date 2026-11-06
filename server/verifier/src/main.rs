@@ -290,7 +290,7 @@ async fn verify(State(app): State<Arc<App>>, body: Result<Json<Knock>, JsonRejec
     }
 }
 
-/// Before taking a knock: the RPCs are the chains they say, and the accepted KnockBinding is v2 on World Chain.
+/// Before taking a knock: the RPCs are the chains they say, and the accepted KnockBinding is v3 on World Chain.
 async fn check(v: &Verifier<Rpc>) -> anyhow::Result<()> {
     let id = v
         .chain
@@ -315,8 +315,8 @@ async fn check(v: &Verifier<Rpc>) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow!(redact(e)))?;
     ensure!(
-        version == U256::from(2),
-        "the accepted KnockBinding says it's v{version}"
+        version == U256::from(3),
+        "the accepted KnockBinding says it's v{version}, not v3"
     );
     let ur = v
         .chain
@@ -366,7 +366,7 @@ async fn main() -> anyhow::Result<()> {
     let verifier = Verifier::new(chain, store, origin.clone(), contract, days * 86_400);
     check(&verifier).await?;
     tracing::info!(
-        "checked: mainnet, World Chain, KnockBinding v2 at {contract}; knocks for {origin}"
+        "checked: mainnet, World Chain, KnockBinding v3 at {contract}; knocks for {origin}"
     );
 
     let cors = CorsLayer::new()

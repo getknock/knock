@@ -46,7 +46,7 @@ fn records() -> Records {
     }
 }
 
-/// The `Bound` KnockBinding v2 emits for the vectors' key and human, for `node`, proved an hour before NOW.
+/// The `Bound` KnockBinding emits for the vectors' key and human, for `node`, proved an hour before NOW.
 fn bound(contract: Address, node: B256) -> Log {
     Log {
         address: contract,
@@ -197,13 +197,25 @@ fn the_digest_and_key_are_the_vectors() {
 }
 
 #[test]
-fn the_accepted_binding_is_v2_production() {
-    assert_eq!(
-        accepted_binding().unwrap(),
-        "0x001173856e4148538c46A0B572664C0Fde99B62c"
-            .parse::<Address>()
-            .unwrap()
+fn the_accepted_binding_is_v3_production() {
+    let d: Value = serde_json::from_str(DEPLOYMENTS).unwrap();
+    let at = |v: &Value| v.as_str().unwrap().parse::<Address>().unwrap();
+    let accepted = accepted_binding().unwrap();
+    assert_eq!(d["production"]["version"], 3);
+    assert_eq!(accepted, at(&d["production"]["KnockBinding"]));
+    assert_ne!(
+        accepted,
+        at(&d["staging"]["KnockBinding"]),
+        "staging takes Simulator proofs"
     );
+    for old in d["retired"].as_array().unwrap() {
+        assert_ne!(
+            accepted,
+            at(&old["production"]),
+            "v{} is retired",
+            old["version"]
+        );
+    }
 }
 
 #[tokio::test]

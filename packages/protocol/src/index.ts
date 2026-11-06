@@ -64,7 +64,11 @@ export const KINDS = Object.keys(TYPES) as Kind[]
 /** Modes of a knock: humanity from the device's binding, or from a fresh World ID proof. */
 export const MODE = { bound: 1, fresh: 2 } as const
 
-/** The World ID action every binding proves. */
+/**
+ * The World ID action spec/vectors/v1.json's binding proves: KnockBinding v2's, kept as the vectors' example of
+ * World ID's hash_to_field. Since v3 each KnockBinding names its own action, which a human's first binding proves
+ * once; contracts/deployments/480.json has each one's (D24).
+ */
 export const ACTION = 'knock-bind'
 
 /** P-256's group order. Device signatures must have s <= N / 2. */

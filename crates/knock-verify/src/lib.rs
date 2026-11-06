@@ -56,20 +56,21 @@ sol! {
         bytes32 humanRef;
     }
 
-    /// KnockBinding v2: this key is one human's, for this name (D22).
+    /// KnockBinding's record: this key is one human's, for this name (D22). v3's first and later bindings alike.
     event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, bytes32 indexed node, uint64 expiresAtMin);
 }
 
-/// The KnockBinding whose `Bound` logs count: v2, production (D22). Staging's takes Simulator proofs, and a v1
-/// binding names no name, so neither counts.
+/// The KnockBinding whose `Bound` logs count: v3, production (D22, D24). Staging's takes Simulator proofs, a v1
+/// binding names no name, and v2's are retired with it, so none of those counts.
 pub fn accepted_binding() -> Result<Address, String> {
     let d: Value = serde_json::from_str(DEPLOYMENTS).map_err(|e| e.to_string())?;
-    if d["chainId"] != WORLD_CHAIN || d["production"]["version"] != 2 {
-        return Err("deployments: no KnockBinding v2 on World Chain".into());
+    if d["chainId"] != WORLD_CHAIN || d["production"]["version"] != 3 {
+        return Err("deployments: no KnockBinding v3 on World Chain".into());
     }
     d["production"]["KnockBinding"]
         .as_str()
-        .and_then(|a| a.parse().ok())
+        .and_then(|a| a.parse::<Address>().ok())
+        .filter(|a| !a.is_zero())
         .ok_or_else(|| "deployments: no production KnockBinding".into())
 }
 
@@ -417,7 +418,7 @@ pub fn check_binding(r: Option<&Receipt>, w: &Wanted) -> Result<Binding, Refusal
             no(
                 6,
                 "no_binding",
-                format!("transaction {tx} holds no Bound from Knock's KnockBinding v2 for this key, human and name"),
+                format!("transaction {tx} holds no Bound from Knock's KnockBinding for this key, human and name"),
             )
         })?;
     if r.block > w.final_block {
