@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { type Mark, checksFor, marks } from './checks'
+import { type Mark, checksFor, marks, numbers } from './checks'
 
 const done = { act: 'sign' as const, petition: 1, count: 2 }
 
@@ -39,5 +39,17 @@ describe('the list', () => {
     expect(checksFor('start')[7]).toBe('Their first new petition today')
     expect(checksFor('raise')[7]).toBe('Their first new fundraiser today')
     expect(marks({ kind: 'bounced', check: 8, error: 'already_entered', why: '' }, 'raise')[7]).toBe('fail')
+  })
+
+  test('the World ID way: checks 1 to 5, then 8, with no knock or fresh proof among them', () => {
+    expect(numbers('world')).toEqual([1, 2, 3, 4, 5, 8])
+    expect(checksFor('sign', 'world')).toHaveLength(6)
+    expect(checksFor('sign', 'world')[5]).toBe('Their first signature on this petition')
+    expect(marks({ kind: 'in', name: 'a.eth', done }, 'sign', 'world')).toEqual(['pass', 'pass', 'pass', 'pass', 'pass', 'pass'])
+    expect(marks({ kind: 'bounced', check: 4, error: 'not_proved', why: '' }, 'in', 'world')).toEqual([
+      'pass', 'pass', 'pass', 'fail', 'todo', 'todo',
+    ])
+    expect(marks({ kind: 'bounced', check: 8, error: 'already_entered', why: '' }, 'sign', 'world')[5]).toBe('fail')
+    expect(marks({ kind: 'in', name: 'a.eth', done: { act: 'in' } }, 'in', 'world')[5]).toBe('skip')
   })
 })

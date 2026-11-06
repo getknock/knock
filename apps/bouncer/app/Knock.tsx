@@ -2,7 +2,7 @@
 import { type Assertion, KnockError, knock } from '@knock-dev/door-sdk'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { type Answer, type Mark, checksFor, marks } from '../lib/checks'
+import { type Answer, type Door, type Mark, checksFor, marks, numbers } from '../lib/checks'
 import type { Intent } from '../lib/intent'
 
 type Phase = 'idle' | 'knocking' | 'checking' | 'done'
@@ -75,13 +75,14 @@ export function useKnock() {
 
 const SAID: Record<Mark, string> = { pass: 'passed', fail: 'failed', skip: 'not asked', todo: 'not checked' }
 
-/** The bouncer's list for the last knock, ticked as the verifier answered */
-export function Bouncer({ answer, act, round }: { answer: Answer | null; act: Intent['act']; round?: number }) {
-  const list = marks(answer, act)
+/** The bouncer's list for the last knock or World ID proof, ticked as the club answered */
+export function Bouncer({ answer, act, round, door = 'knock' }: { answer: Answer | null; act: Intent['act']; round?: number; door?: Door }) {
+  const list = marks(answer, act, door)
+  const n = numbers(door)
   return (
     <ol className="checks" key={round}>
-      {checksFor(act).map((what, i) => (
-        <li key={what} className={list[i]} style={{ '--i': i } as React.CSSProperties}>
+      {checksFor(act, door).map((what, i) => (
+        <li key={what} className={list[i]} data-n={n[i]} style={{ '--i': i } as React.CSSProperties}>
           <span className="mark" aria-hidden="true" />
           <span>{what}</span>
           <span className="sr">, {SAID[list[i]]}</span>

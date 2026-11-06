@@ -83,11 +83,20 @@ h3 {
 }
 
 .club-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
   font-family: var(--sign), sans-serif;
   font-weight: 900;
   font-size: 1.6rem;
   line-height: 1;
   text-decoration: none;
+}
+
+.club-name .mark {
+  width: 2.1rem;
+  height: 2.1rem;
+  flex: none;
 }
 
 .bar nav {
@@ -768,7 +777,6 @@ main {
   margin: 0.25rem 0 0;
   padding: 0;
   list-style: none;
-  counter-reset: check;
   font-size: 0.95rem;
 }
 
@@ -778,11 +786,10 @@ main {
   align-items: center;
   padding: 0.35rem 0;
   border-bottom: 1px solid #1c22301f;
-  counter-increment: check;
 }
 
 .checks li::before {
-  content: counter(check);
+  content: attr(data-n);
   color: var(--faint);
   font-variant-numeric: tabular-nums;
 }
@@ -876,4 +883,129 @@ main {
 
 .sigs .quiet {
   color: var(--on-door);
+}
+
+/* The World ID way in (D35): a wallet to sign in with, then World App's code */
+.paper .text-btn,
+.panel .text-btn {
+  color: var(--ink);
+}
+
+.act .instead {
+  justify-self: center;
+  color: var(--ink-soft);
+  font-size: 0.95rem;
+}
+
+.act .instead:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.bar nav a.knocker {
+  color: var(--ink);
+}
+
+.world {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.plain.wallet {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.plain.wallet img {
+  border-radius: 4px;
+}
+
+.scan {
+  display: grid;
+  grid-template-columns: minmax(9rem, 13rem) minmax(0, 1fr);
+  align-items: start;
+  gap: 1.1rem;
+  padding: 1rem;
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  background: #fff;
+}
+
+.scan svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.scan-say {
+  display: grid;
+  justify-items: start;
+  gap: 0.7rem;
+}
+
+.scan-say p {
+  margin: 0;
+}
+
+.scan-say .plain {
+  padding: 0.45rem 1rem;
+}
+
+@media (max-width: 34rem) {
+  .scan {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .scan svg {
+    max-width: 15rem;
+    justify-self: center;
+  }
+}
+
+.find {
+  display: grid;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.find label {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.find label > span {
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.find input {
+  padding: 0.5rem 0.7rem;
+  border: 2px solid #1c223040;
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.find .plain {
+  justify-self: start;
+  padding: 0.45rem 1rem;
+}
+
+.ways-in {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: 1.25rem 2rem;
+  margin: 1.5rem 0;
+}
+
+.ways-in h2 {
+  margin-bottom: 0.45rem;
+  font-size: 1.55rem;
+}
+
+.ways-in p {
+  margin: 0;
 }

@@ -14,12 +14,10 @@ export function Sign({ petition }: { petition: number }) {
       </label>
       <label className="check">
         <input type="checkbox" checked={listed} onChange={(e) => setListed(e.target.checked)} />
-        <span>Show my Wedgie's name on my signature</span>
+        <span>Show my name on my signature</span>
       </label>
-      <Act label="Knock to sign" intent={() => ({ act: 'sign', petition, listed, reason })} />
-      <p className="fine">
-        Without your name, your signature counts the same, and the club keeps nothing that leads from it to your Wedgie.
-      </p>
+      <Act label="Knock to sign" worldLabel="Sign with World ID" intent={() => ({ act: 'sign', petition, listed, reason })} />
+      <p className="fine">Unnamed, your signature counts the same, and the club shows nothing that leads from it to you.</p>
     </form>
   )
 }
@@ -40,7 +38,7 @@ export function Close({ petition }: { petition: number }) {
           <span>Just close it</span>
         </label>
       </fieldset>
-      <Act label="Knock to close it" intent={() => ({ act: 'close', petition, outcome })} list={false} />
+      <Act label="Knock to close it" worldLabel="Close it with World ID" intent={() => ({ act: 'close', petition, outcome })} list={false} />
     </form>
   )
 }

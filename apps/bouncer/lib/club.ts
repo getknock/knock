@@ -1,15 +1,17 @@
 /**
  * The Human Club's records (D32): humans, petitions and signatures, fundraisers and gifts, sessions, and the act
  * each challenge was issued for. They're keyed by the human's nullifier, so one human is one signer, whichever of
- * their Wedgies knocks. The club shows a Wedgie's ENS name where its human chose to show it, and a fundraiser's
- * always, since its gifts go to the wallet that name resolves to. It shows nothing else about anyone: no nullifier,
- * and no key or binding of a signer who stayed unnamed.
+ * their Wedgies knocks, and whether they knock or come in with World ID and a wallet (D35): that way proves Knock's
+ * own action, so it gives the same nullifier. The club shows a human's name (their Wedgie's, or their wallet's ENS
+ * name or address) where they chose to show it, and a fundraiser's always, since its gifts go to that wallet. It
+ * shows nothing else about anyone: no nullifier, and no key or binding of a signer who stayed unnamed.
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { parseEther } from 'viem'
 import { type Db, type Exec, type Tx, all, inTx, one, run, unique } from './db'
 import { type Intent, dayOf } from './intent'
 import { type Knocked, type Memory, Refusal } from '@knock-dev/verify'
+import type { Hex } from 'viem'
 
 /** The club's no to an act, before the knock or after it passed */
 export class Declined extends Error {
@@ -44,6 +46,57 @@ export async function take(db: Db, challenge: string, now: number): Promise<Inte
   )
   if (!row || row.at < now - HOLD_MS) return null
   return JSON.parse(row.intent) as Intent
+}
+
+/** A World ID step the club waits on (D35): a wallet's sign-in, by its nonce; the wallet once it has signed in, by its
+ *  cookie, while its visitor proves they're human; then World App's proof, by its request's nonce, for the act it was
+ *  asked for: a human's first proof, for the key the club made them, or a proof of their session, for the club's
+ *  challenge */
+export type Held =
+  | { step: 'wallet'; address: Hex; message: string }
+  | { step: 'signed'; wallet: Hex; name: string }
+  | { step: 'enroll'; intent: Intent; wallet: Hex; name: string; action: string; node: Hex; secret: Hex; key: Hex; signal: string }
+  | { step: 'prove'; intent: Intent; wallet: Hex; name: string; session: string; challenge: Hex }
+
+/** Held under its own prefix, so a knock can never answer a World ID step, nor a proof a knock's challenge. Holding
+ *  a step again holds it anew, for as long again. */
+export async function holdStep(db: Db, key: string, h: Held, now: number) {
+  await db.batch(
+    [
+      { sql: 'DELETE FROM pending WHERE at < ?', args: [now - HOLD_MS] },
+      {
+        sql: `INSERT INTO pending (challenge, intent, at) VALUES (?, ?, ?)
+              ON CONFLICT (challenge) DO UPDATE SET intent = excluded.intent, at = excluded.at`,
+        args: [`w:${key.toLowerCase()}`, JSON.stringify(h), now],
+      },
+    ],
+    'write',
+  )
+}
+
+const fresh = <S extends Held['step']>(row: { intent: string; at: number } | null, steps: readonly S[], now: number) => {
+  if (!row || row.at < now - HOLD_MS) return null
+  const h = JSON.parse(row.intent) as Held
+  return (steps as readonly string[]).includes(h.step) ? (h as Extract<Held, { step: S }>) : null
+}
+
+/** A held step, once, and only a step that was wanted: another stays held */
+export async function takeStep<S extends Held['step']>(db: Db, key: string, steps: S | readonly S[], now: number) {
+  const want: readonly S[] = typeof steps === 'string' ? [steps] : steps
+  const row = await one<{ intent: string; at: number }>(
+    db,
+    `DELETE FROM pending WHERE challenge = ? AND json_extract(intent, '$.step') IN (${want.map(() => '?').join(', ')})
+     RETURNING intent, at`,
+    `w:${key.toLowerCase()}`,
+    ...want,
+  )
+  return fresh(row, want, now)
+}
+
+/** A held step, left held: a wallet's sign-in lasts while its visitor tries World App again */
+export async function readStep<S extends Held['step']>(db: Db, key: string, step: S, now: number) {
+  const row = await one<{ intent: string; at: number }>(db, 'SELECT intent, at FROM pending WHERE challenge = ?', `w:${key.toLowerCase()}`)
+  return fresh(row, [step], now)
 }
 
 /** What the verifier remembers, in the club's tables */
@@ -82,6 +135,33 @@ export async function before(db: Exec, i: Intent, me: string | null) {
     throw new Declined('not_yours', 'Only the human who started this petition can close it.')
 }
 
+/** Who an act is by: a knock the verifier let in, or a World ID proof of a Knock session (D35) */
+export type Actor = {
+  /** The human: their nullifier for Knock's action, a 32-byte word in lowercase hex */
+  nullifier: Hex
+  /** Their Wedgie's name, or their wallet's ENS name or address */
+  name: string
+  /** What the act uses up, once: the Wedgie's counter (V5 again), or the World ID proof */
+  spends: { key: string; counter: number; again: string }
+  /** What a named signature shows of it: the knock and its binding. Nothing, for a proof. */
+  shows: { counter: number; tx: Hex; block: number } | null
+}
+
+export const byKnock = (k: Knocked): Actor => ({
+  nullifier: k.nullifier,
+  name: k.name,
+  spends: { key: k.key, counter: k.counter, again: "the Wedgie's counter didn't rise: a knock seen before" },
+  shows: { counter: k.counter, tx: k.binding.tx, block: k.binding.block },
+})
+
+/** A World ID proof, used up by what it alone carries: a session proof's nullifier, or an enrollment's binding */
+export const byProof = (nullifier: Hex, name: string, once: string): Actor => ({
+  nullifier,
+  name,
+  spends: { key: `world:${once.toLowerCase()}`, counter: 1, again: 'this World ID proof was used before' },
+  shows: null,
+})
+
 export type Done =
   | { act: 'in' }
   | { act: 'start'; petition: number }
@@ -95,7 +175,7 @@ export type Outcome = { ok: true; done: Done } | { ok: false; declined: Declined
 
 /** V8, once per human, in the club's words: a second signature, or a second new petition or fundraiser in a day */
 const once = {
-  sign: () => new Refusal(8, 'already_entered', 'This human has signed this petition already, with this Wedgie or another.'),
+  sign: () => new Refusal(8, 'already_entered', 'This human has signed this petition already, with a Wedgie or with World ID.'),
   start: () => new Refusal(8, 'already_entered', 'One new petition a day for each human: start this one tomorrow.'),
   raise: () => new Refusal(8, 'already_entered', 'One new fundraiser a day for each human: start this one tomorrow.'),
 }
@@ -120,7 +200,7 @@ async function refusal(tx: Tx, i: Intent, me: string, now: number, payout: strin
     }
     case 'raise':
       if (!payout || !/^0x[0-9a-fA-F]{40}$/.test(payout))
-        return new Declined('no_wallet', "Your Wedgie's name doesn't resolve to a wallet in ENS, so gifts would have nowhere to go.")
+        return new Declined('no_wallet', "Your name doesn't resolve to a wallet in ENS, so gifts would have nowhere to go.")
       return (await one(tx, 'SELECT 1 AS yes FROM fundraisers WHERE starter = ? AND day = ?', me, dayOf(now))) ? once.raise() : null
     case 'stop': {
       const f = await fundState(tx, i.fundraiser)
@@ -134,7 +214,7 @@ async function refusal(tx: Tx, i: Intent, me: string, now: number, payout: strin
   }
 }
 
-async function addSignature(tx: Tx, petition: number, k: Knocked, listed: boolean, reason: string, now: number) {
+async function addSignature(tx: Tx, petition: number, k: Actor, listed: boolean, reason: string, now: number) {
   await run(
     tx,
     `INSERT INTO signatures (petition, nullifier, name, reason, at, counter, binding_tx, binding_block)
@@ -145,13 +225,13 @@ async function addSignature(tx: Tx, petition: number, k: Knocked, listed: boolea
     reason || null,
     now,
     // A named signature shows the knock behind it; an unnamed one keeps nothing that leads to its Wedgie
-    listed ? k.counter : null,
-    listed ? k.binding.tx : null,
-    listed ? k.binding.block : null,
+    listed ? (k.shows?.counter ?? null) : null,
+    listed ? (k.shows?.tx ?? null) : null,
+    listed ? (k.shows?.block ?? null) : null,
   )
 }
 
-async function act(tx: Tx, i: Intent, k: Knocked, now: number, payout: string | null | undefined): Promise<Done> {
+async function act(tx: Tx, i: Intent, k: Actor, now: number, payout: string | null | undefined): Promise<Done> {
   const me = k.nullifier
   switch (i.act) {
     case 'in':
@@ -203,21 +283,23 @@ async function act(tx: Tx, i: Intent, k: Knocked, now: number, payout: string | 
 }
 
 /**
- * The act, for a knock the verifier let in, in one transaction with what the knock uses up: the Wedgie's counter
- * (V5 again, for two knocks racing) and the human, met under the name they knocked with. A V8 no rolls all of it
- * back; any other no keeps the counter and the human, so they're in though the act isn't done. A fundraiser takes
- * the wallet its starter's Wedgie name resolves to, read from ENS by the caller (payout).
+ * The act, for a knock the verifier let in or a World ID proof the club checked, in one transaction with what it
+ * uses up: the Wedgie's counter (V5 again, for two knocks racing) or the proof, and the human, met under the name
+ * they came with. A V8 no rolls all of it back; any other no keeps what was used up and the human, so they're in
+ * though the act isn't done. A fundraiser takes the wallet its starter's name resolves to, or the wallet they came
+ * in with, from the caller (payout).
  */
-export async function apply(db: Db, i: Intent, k: Knocked, now: number, payout?: string | null): Promise<Outcome> {
+export async function apply(db: Db, i: Intent, who: Knocked | Actor, now: number, payout?: string | null): Promise<Outcome> {
+  const k = 'spends' in who ? who : byKnock(who)
   return inTx(db, async (tx) => {
     const kept = await run(
       tx,
       `INSERT INTO counters (key, counter) VALUES (?, ?)
        ON CONFLICT (key) DO UPDATE SET counter = excluded.counter WHERE counters.counter < excluded.counter`,
-      k.key,
-      k.counter,
+      k.spends.key,
+      k.spends.counter,
     )
-    if (kept.rowsAffected !== 1) throw new Refusal(5, 'replayed', "the Wedgie's counter didn't rise: a knock seen before")
+    if (kept.rowsAffected !== 1) throw new Refusal(5, 'replayed', k.spends.again)
     await run(
       tx,
       `INSERT INTO humans (nullifier, name, first_at, seen_at, knocks) VALUES (?, ?, ?, ?, 1)
@@ -317,32 +399,41 @@ export async function takeGift(db: Db, ref: string, tx: string, seen: SeenTx | n
   return { fundraiser: Number(g.fundraiser), value: g.value }
 }
 
-/** Sessions: a knock that got in keeps you in for two weeks. The cookie holds the token; the club, its hash only. */
+/** Sessions: a knock that got in keeps you in for two weeks. The cookie holds the token; the club, its hash only. A
+ *  session that came in with World ID also keeps its wallet and its World ID session, which each act proves (D35). */
 export const SESSION_MS = 14 * 24 * 3600_000
-const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
+export const hashOf = (token: string) => createHash('sha256').update(token).digest('hex')
 
-export async function startSession(db: Db, nullifier: string, now: number): Promise<string> {
+/** How a session came in with World ID: the wallet that signed in, and the World ID session its acts prove */
+export type WorldIn = { wallet: string; session: string }
+
+export async function startSession(db: Db, nullifier: string, now: number, world?: WorldIn): Promise<string> {
   const token = randomBytes(32).toString('base64url')
   await db.batch(
     [
+      { sql: 'DELETE FROM world_sessions WHERE token IN (SELECT token FROM sessions WHERE expires_at < ?)', args: [now] },
       { sql: 'DELETE FROM sessions WHERE expires_at < ?', args: [now] },
       {
         sql: 'INSERT INTO sessions (token, nullifier, at, expires_at) VALUES (?, ?, ?, ?)',
         args: [hashOf(token), nullifier.toLowerCase(), now, now + SESSION_MS],
       },
+      ...(world
+        ? [{ sql: 'INSERT INTO world_sessions (token, wallet, session) VALUES (?, ?, ?)', args: [hashOf(token), world.wallet.toLowerCase(), world.session] }]
+        : []),
     ],
     'write',
   )
   return token
 }
 
-export type Me = { nullifier: string; name: string; firstAt: number; knocks: number }
+export type Me = { nullifier: string; name: string; firstAt: number; knocks: number; wallet: string | null; world: string | null }
 
 export async function sessionOf(db: Db, token: string | undefined, now: number): Promise<Me | null> {
   if (!token) return null
   return one<Me>(
     db,
-    `SELECT h.nullifier, h.name, h.first_at AS firstAt, h.knocks FROM sessions s JOIN humans h ON h.nullifier = s.nullifier
+    `SELECT h.nullifier, h.name, h.first_at AS firstAt, h.knocks, w.wallet, w.session AS world
+     FROM sessions s JOIN humans h ON h.nullifier = s.nullifier LEFT JOIN world_sessions w ON w.token = s.token
      WHERE s.token = ? AND s.expires_at > ?`,
     hashOf(token),
     now,
@@ -350,7 +441,14 @@ export async function sessionOf(db: Db, token: string | undefined, now: number):
 }
 
 export async function endSession(db: Db, token: string | undefined) {
-  if (token) await run(db, 'DELETE FROM sessions WHERE token = ?', hashOf(token))
+  if (!token) return
+  await db.batch(
+    [
+      { sql: 'DELETE FROM world_sessions WHERE token = ?', args: [hashOf(token)] },
+      { sql: 'DELETE FROM sessions WHERE token = ?', args: [hashOf(token)] },
+    ],
+    'write',
+  )
 }
 
 /** A petition as the club shows it: no nullifiers, its starter's name only if they chose to show it */

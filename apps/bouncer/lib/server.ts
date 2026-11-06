@@ -1,14 +1,16 @@
 /**
  * The club's server side (D32), in Vercel's functions: its database, the session cookie, its verifier, and the
- * chains, read over public RPCs by default: mainnet for ENS and gifts, World Chain for bindings. Server code only.
+ * chains, read over public RPCs by default: mainnet for ENS, gifts and wallets' sign-ins, World Chain for bindings
+ * and World ID proofs. Server code only.
  */
 import { cookies } from 'next/headers'
 import type { NextRequest } from 'next/server'
-import { MAX_BINDING_DAYS, type Memory, type Site, rpcChain, strictFrom } from '@knock-dev/verify'
+import { MAX_BINDING_DAYS, type Memory, type Site, WORLD_RPC, rpcChain, strictFrom } from '@knock-dev/verify'
 import { type Address, type Hex, TransactionNotFoundError, TransactionReceiptNotFoundError, createPublicClient, http } from 'viem'
 import { mainnet } from 'viem/chains'
 import { type Me, type SeenTx, memory, sessionOf } from './club'
 import { type Db, open } from './db'
+import { type WorldReads, worldReads } from './world'
 
 const kept = globalThis as { humanClub?: Promise<Db> }
 
@@ -21,6 +23,9 @@ export function db(): Promise<Db> {
 }
 
 export const COOKIE = 'club_session'
+
+/** A wallet that signed in, for the few minutes its visitor takes to prove they're human with World ID (D35) */
+export const WALLET_COOKIE = 'club_wallet'
 
 /** The human this request's session is, if any. The cookie first: a page that reads it is rendered for each request,
  *  so no build opens the database, and a visitor with no session costs no query. */
@@ -63,6 +68,29 @@ export const site = (origin: string, d: Db): Site & { memory: Memory } => ({
   maxBindingDays: Number(process.env.CLUB_MAX_BINDING_DAYS ?? MAX_BINDING_DAYS),
   strict: strictFrom(process.env.CLUB_STRICT),
 })
+
+/** What the club reads on World Chain for World ID visitors (D35): sessions, World ID's verifier, bindings. Calls and
+ *  receipts only, so the client needs none of the chain's own formats. */
+export const reads: WorldReads = worldReads(createPublicClient({ transport: http(process.env.CLUB_WORLD_RPC ?? WORLD_RPC) }))
+
+/** Whether a wallet signed a message: an account's signature, or a contract wallet's own yes on mainnet (ERC-1271,
+ *  or ERC-6492 for one that isn't deployed yet) */
+export async function signedBy(address: Address, message: string, signature: Hex): Promise<boolean> {
+  try {
+    return await eth.verifyMessage({ address, message, signature })
+  } catch {
+    return false
+  }
+}
+
+/** What names a wallet at the club: its primary ENS name, which resolves back to it, or else its address */
+export async function nameOfWallet(address: Address): Promise<string> {
+  try {
+    return (await eth.getEnsName({ address })) ?? address
+  } catch {
+    return address
+  }
+}
 
 /** The wallet a Wedgie's name resolves to in ENS (D9), where its fundraisers' gifts go */
 export async function walletOf(name: string): Promise<string | null> {

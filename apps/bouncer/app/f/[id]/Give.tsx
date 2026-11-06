@@ -144,7 +144,7 @@ export function Stop({ fundraiser }: { fundraiser: number }) {
   return (
     <div className="form close">
       <p className="legend">You started this fundraiser. Close it to new gifts?</p>
-      <Act label="Knock to close it" intent={() => ({ act: 'stop', fundraiser })} list={false} />
+      <Act label="Knock to close it" worldLabel="Close it with World ID" intent={() => ({ act: 'stop', fundraiser })} list={false} />
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { canKnock, useKnock, waiting } from './Knock'
 
-/** Knock in from the bar: the club remembers this human for two weeks */
+/** Knock in from the bar, or go in with World ID: the club remembers this human for two weeks */
 export function KnockIn() {
   const k = useKnock()
   const [able, setAble] = useState(true)
@@ -14,10 +14,14 @@ export function KnockIn() {
       : null
   return (
     <span className="knock-in">
-      <button type="button" className="knocker small" onClick={() => k.run({ act: 'in' })} disabled={k.busy || !able}>
-        {waiting(k.phase) ?? 'Knock in'}
-      </button>
-      {!able ? <span className="hint">Knocking needs Chrome or Edge on a computer.</span> : null}
+      {able ? (
+        <button type="button" className="knocker small" onClick={() => k.run({ act: 'in' })} disabled={k.busy}>
+          {waiting(k.phase) ?? 'Knock in'}
+        </button>
+      ) : null}
+      <a href="/in" className={able ? 'text-btn' : 'knocker small'}>
+        {able ? 'or World ID' : 'Come in'}
+      </a>
       {why ? (
         <span className="hint out" role="status">
           {why}

@@ -24,7 +24,7 @@ export default async function Fundraisers({ searchParams }: { searchParams: Prom
           </nav>
         </div>
         <p className="board-note">
-          Each is started by one human, and named for their Wedgie: its gifts go to the wallet that name resolves to.
+          Each is started by one human, and shows their name. Its gifts go straight to their wallet.
         </p>
         {list.length ? (
           <ol className="notices">
@@ -37,7 +37,7 @@ export default async function Fundraisers({ searchParams }: { searchParams: Prom
             <p>No fundraisers yet.</p>
             <p>
               <a href="/start?kind=fundraiser">Start the first</a>: what it's for, a goal in ETH, and one press on your
-              Wedgie.
+              Wedgie or a proof in World App.
             </p>
           </div>
         )}

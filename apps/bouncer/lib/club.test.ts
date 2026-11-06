@@ -9,21 +9,25 @@ import {
   apply,
   askGift,
   before,
+  byProof,
   endSession,
   fundraiser,
   fundraisers,
   giftsTo,
   hold,
+  holdStep,
   memory,
   mine,
   mineFunds,
   petition,
   petitions,
+  readStep,
   sessionOf,
   signatures,
   startSession,
   take,
   takeGift,
+  takeStep,
   totals,
 } from './club'
 import { type Db, all, open } from './db'
@@ -407,5 +411,80 @@ describe('fundraisers and gifts', () => {
     await takeGift(db, g.ref, hex('f1'), seen(g.value), T0)
     expect(await totals(db)).toMatchObject({ fundraisers: 1 })
     expect(BigInt((await totals(db)).raised) / 10n ** 9n).toBe(BigInt(g.value) / 10n ** 9n)
+  })
+})
+
+describe('the World ID way in (D35)', () => {
+  const SESSION = `session_${'ab'.repeat(32)}01${'cd'.repeat(31)}`
+  const sign = { act: 'sign', petition: 1, listed: true, reason: '' } as const
+  const wallet = WALLET as `0x${string}`
+
+  test('World App proving a human is the same signer as their Wedgie, either way round', async () => {
+    const db = await club()
+    await done(apply(db, start, knocked('11', 'starter.eth'), T0))
+    await done(apply(db, sign, knocked('22', 'a.itzraj.eth'), T0 + 1))
+    expect(await no(apply(db, sign, byProof(hex('22'), 'itzraj.eth', hex('e1')), T0 + 2))).toBe('check 8')
+    await done(apply(db, sign, byProof(hex('33'), WALLET, hex('e2')), T0 + 3))
+    expect(await no(apply(db, sign, knocked('33', 'b.eth'), T0 + 4))).toBe('check 8')
+    expect((await petition(db, 1, T0 + 5))?.count).toBe(3)
+  })
+
+  test('each proof is used once (5), whatever act it comes with', async () => {
+    const db = await club()
+    await done(apply(db, { act: 'in' }, byProof(hex('22'), WALLET, hex('e1')), T0))
+    expect(await no(apply(db, start, byProof(hex('22'), WALLET, hex('E1')), T0 + 1))).toBe('check 5')
+    await done(apply(db, { act: 'in' }, byProof(hex('22'), WALLET, hex('e2')), T0 + 2))
+    expect((await sessionOf(db, await startSession(db, hex('22'), T0 + 2), T0 + 3))?.knocks).toBe(2)
+  })
+
+  test('a named signature by World ID shows its name, and no knock or binding', async () => {
+    const db = await club()
+    await done(apply(db, start, knocked('11', 'starter.eth'), T0))
+    await done(apply(db, sign, byProof(hex('22'), 'itzraj.eth', hex('e1')), T0 + 1))
+    expect((await signatures(db, 1))[0]).toEqual({ name: 'itzraj.eth', reason: null, at: T0 + 1, counter: null, bindingTx: null, bindingBlock: null })
+  })
+
+  test('a fundraiser started with World ID takes the wallet its starter came in with', async () => {
+    const db = await club()
+    await done(apply(db, raise, byProof(hex('44'), WALLET, hex('e3')), T0, WALLET))
+    expect(await fundraiser(db, 1, T0)).toMatchObject({ name: WALLET, payout: WALLET.toLowerCase() })
+  })
+
+  test('a session that came in with World ID keeps its wallet and World ID session, and ends with them', async () => {
+    const db = await club()
+    await done(apply(db, { act: 'in' }, byProof(hex('22'), WALLET, hex('e1')), T0))
+    const token = await startSession(db, hex('22'), T0, { wallet: WALLET, session: SESSION })
+    expect(await sessionOf(db, token, T0 + HOUR)).toMatchObject({ nullifier: hex('22'), name: WALLET, wallet: WALLET.toLowerCase(), world: SESSION })
+    expect(await sessionOf(db, await startSession(db, hex('22'), T0), T0)).toMatchObject({ wallet: null, world: null })
+    await endSession(db, token)
+    expect(await all(db, 'SELECT * FROM world_sessions')).toEqual([])
+  })
+
+  test('held steps: taken once, and only as the step wanted; a sign-in read again while it lasts', async () => {
+    const db = await club()
+    const signed = { step: 'signed', wallet, name: WALLET } as const
+    await holdStep(db, 'Tok', signed, T0)
+    expect(await readStep(db, 'tok', 'signed', T0 + 1)).toEqual(signed)
+    expect(await readStep(db, 'tok', 'signed', T0 + 2)).toEqual(signed)
+    expect(await takeStep(db, 'tok', ['prove', 'enroll'], T0 + 3)).toBe(null)
+    expect(await takeStep(db, 'tok', 'signed', T0 + 4)).toEqual(signed)
+    expect(await readStep(db, 'tok', 'signed', T0 + 5)).toBe(null)
+    // Held again, it lasts as long again; never held, or held too long, it's gone
+    await holdStep(db, 'again', signed, T0)
+    await holdStep(db, 'again', signed, T0 + HOLD_MS - 1)
+    expect(await readStep(db, 'again', 'signed', T0 + HOLD_MS + 1)).toEqual(signed)
+    expect(await readStep(db, 'again', 'signed', T0 + 2 * HOLD_MS)).toBe(null)
+    expect(await takeStep(db, 'never', 'wallet', T0)).toBe(null)
+  })
+
+  test("a knock's challenge can't answer a World ID step, nor a proof a knock's challenge", async () => {
+    const db = await club()
+    await hold(db, hex('aa'), { act: 'in' }, T0)
+    expect(await takeStep(db, hex('aa'), ['prove', 'enroll'], T0)).toBe(null)
+    expect(await take(db, hex('aa'), T0)).toEqual({ act: 'in' })
+    const prove = { step: 'prove' as const, intent: { act: 'in' as const }, wallet, name: WALLET, session: SESSION, challenge: hex('cc') }
+    await holdStep(db, hex('bb'), prove, T0)
+    expect(await take(db, hex('bb'), T0)).toBe(null)
+    expect(await takeStep(db, hex('BB'), ['prove', 'enroll'], T0)).toEqual(prove)
   })
 })

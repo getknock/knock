@@ -4,6 +4,7 @@ import { petition, signed, startedBy, voices } from '../../../lib/club'
 import { goalOf } from '../../../lib/intent'
 import { db, me } from '../../../lib/server'
 import { Progress, Stamp, When, humans } from '../../parts'
+import { preview } from '../../preview'
 import { WORLDSCAN } from '../../wallet'
 import { Close, Sign } from './Sign'
 
@@ -17,7 +18,9 @@ const idOf = async (params: Promise<{ id: string }>) => {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const id = await idOf(params)
   const p = id ? await petition(await db(), id, Date.now()) : null
-  return { title: p ? p.title : 'No such petition' }
+  if (!p) return { title: 'No such petition' }
+  const n = p.count === 1 ? '1 has' : `${p.count} have`
+  return { title: p.title, ...preview(p.title, `To ${p.target}. A petition only humans can sign: ${n} so far.`) }
 }
 
 export default async function PetitionPage({ params }: { params: Promise<{ id: string }> }) {
@@ -61,7 +64,7 @@ export default async function PetitionPage({ params }: { params: Promise<{ id: s
 
       <section className="sigs" aria-labelledby="sigs">
         <h2 id="sigs">Signatures</h2>
-        <p className="board-note">Each one is a knock the club checked.</p>
+        <p className="board-note">Each one is a knock or a World ID proof the club checked.</p>
         <ol>
           {said.map((s, i) => (
             <li key={`${s.at}-${i}`}>

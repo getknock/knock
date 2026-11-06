@@ -37,9 +37,14 @@ export function StartPetition() {
       </label>
       <label className="check">
         <input type="checkbox" checked={listed} onChange={(e) => setListed(e.target.checked)} />
-        <span>Show my Wedgie's name as its starter, and on my signature</span>
+        <span>Show my name as its starter, and on my signature</span>
       </label>
-      <Act label="Knock to start it" intent={() => ({ act: 'start', title, target, body, listed })} then={goTo(router)} />
+      <Act
+        label="Knock to start it"
+        worldLabel="Start it with World ID"
+        intent={() => ({ act: 'start', title, target, body, listed })}
+        then={goTo(router)}
+      />
       <p className="fine">
         It goes up with your signature on it. Each human can start one petition a day, and only you can close it.
       </p>
@@ -68,10 +73,10 @@ export function StartFundraiser() {
         </span>
         <input inputMode="decimal" value={goal} onChange={(e) => setGoal(e.target.value)} placeholder="0.5" />
       </label>
-      <Act label="Knock to start it" intent={() => ({ act: 'raise', title, story, goal })} then={goTo(router)} />
+      <Act label="Knock to start it" worldLabel="Start it with World ID" intent={() => ({ act: 'raise', title, story, goal })} then={goTo(router)} />
       <p className="fine">
-        Gifts go to the wallet your Wedgie's ENS name resolves to, and the fundraiser shows that name, so givers know
-        whose it is. Each human can start one fundraiser a day.
+        Gifts go to your wallet: the one your Wedgie's ENS name resolves to, or the one you came in with by World ID.
+        The fundraiser shows your name, so givers know whose it is. Each human can start one fundraiser a day.
       </p>
     </form>
   )

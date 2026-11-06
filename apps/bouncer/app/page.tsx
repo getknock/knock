@@ -16,7 +16,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
         <h1 id="club">The Human Club</h1>
         <p className="lede">
           Petitions only humans can sign, and fundraisers only humans can start. Each human signs once, with one press
-          on their Wedgie, and the club learns nothing about them but its name.
+          on their Wedgie or a proof in World App, and the club learns nothing about them but a name.
         </p>
         {t.signatures > 0 ? (
           <p className="tally">
@@ -57,7 +57,7 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           <div className="empty">
             <p>No petitions yet.</p>
             <p>
-              Start the first: a title, who it's to, what it asks, and one press on your Wedgie. It goes up with your
+              Start the first: a title, who it's to, what it asks, and one press on your Wedgie or a proof in World App. It goes up with your
               signature on it.
             </p>
           </div>
@@ -86,22 +86,22 @@ export default async function Home({ searchParams }: { searchParams: Promise<{ s
           <div>
             <h3>Only humans sign</h3>
             <p>
-              A signature is a press on a Wedgie that one human bound to themselves with World ID. A bot has no
-              Wedgie, and a human with three Wedgies still signs once.
+              A signature is a press on a Wedgie that one human bound to themselves with World ID, or World App's proof
+              of that same human. A bot has neither, and a human with three Wedgies and World App still signs once.
             </p>
           </div>
           <div>
             <h3>Nobody's real name</h3>
             <p>
-              The club asks for no email, name or password. It sees your Wedgie's ENS name, and shows it on a
-              signature only if you say so.
+              The club asks for no email, name or password. It sees your Wedgie's ENS name, or your wallet's, and
+              shows it on a signature only if you say so.
             </p>
           </div>
           <div>
             <h3>Gifts go straight to them</h3>
             <p>
-              A fundraiser's gifts go from your wallet to the wallet its starter's ENS name resolves to. The club
-              never holds any ETH.
+              A fundraiser's gifts go from your wallet straight to its starter's: the one their Wedgie's ENS name
+              resolves to, or the one they came in with. The club never holds any ETH.
             </p>
           </div>
         </div>

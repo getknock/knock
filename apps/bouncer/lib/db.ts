@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS sessions (
   at INTEGER NOT NULL,
   expires_at INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS world_sessions (
+  token TEXT PRIMARY KEY REFERENCES sessions(token),
+  wallet TEXT NOT NULL,
+  session TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS counters (
   key TEXT PRIMARY KEY,
   counter INTEGER NOT NULL

@@ -15,7 +15,7 @@ export default async function Me() {
       <main className="page narrow">
         <div className="paper">
           <h1>Yours</h1>
-          <p>Knock in to see what you've started, signed and given here.</p>
+          <p>Come in to see what you've started, signed and given here.</p>
           <KnockIn />
         </div>
       </main>
@@ -28,8 +28,9 @@ export default async function Me() {
       <section className="hero small" aria-labelledby="me">
         <h1 id="me">{who.name}</h1>
         <p className="lede">
-          In the club since <When at={who.firstAt} />, with {who.knocks.toLocaleString('en')}{' '}
-          {who.knocks === 1 ? 'knock' : 'knocks'}. Whichever of your Wedgies knocks, the club counts the same human.
+          In the club since <When at={who.firstAt} />, through the door {who.knocks.toLocaleString('en')}{' '}
+          {who.knocks === 1 ? 'time' : 'times'}. Whichever of your Wedgies knocks, or World App proves you, the club
+          counts the same human.
         </p>
       </section>
 

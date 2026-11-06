@@ -4,6 +4,7 @@ import { fundraiser, giftsTo, raisedBy } from '../../../lib/club'
 import { eth } from '../../../lib/intent'
 import { db, me } from '../../../lib/server'
 import { Address, Raised, Stamp, When, humans } from '../../parts'
+import { preview } from '../../preview'
 import { ETHERSCAN } from '../../wallet'
 import { Give, Stop } from './Give'
 
@@ -17,7 +18,11 @@ const idOf = async (params: Promise<{ id: string }>) => {
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const id = await idOf(params)
   const f = id ? await fundraiser(await db(), id, Date.now()) : null
-  return { title: f ? f.title : 'No such fundraiser' }
+  if (!f) return { title: 'No such fundraiser' }
+  return {
+    title: f.title,
+    ...preview(f.title, `A fundraiser ${f.name} started, as a human the club checked. Gifts go straight to their wallet.`),
+  }
 }
 
 export default async function FundraiserPage({ params }: { params: Promise<{ id: string }> }) {
