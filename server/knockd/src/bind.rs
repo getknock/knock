@@ -5,6 +5,7 @@
 
 use crate::{App, CHAIN_ID, Refusal, rp::hash_to_field, word};
 use alloy::primitives::{Address, B256, Bytes, U256, keccak256};
+use alloy::providers::Provider;
 use alloy::sol;
 use alloy::sol_types::{SolError, SolStruct, eip712_domain};
 use axum::Json;
@@ -293,6 +294,64 @@ pub async fn bind(
             "expiresAtMin": bound.expiresAtMin,
         },
         "keyHash": keccak256([x.as_slice(), y.as_slice()].concat()),
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct BoundRequest {
+    tx: String,
+}
+
+/// POST /bound: a binding as World Chain has it, from its transaction: the Bound log one of our KnockBindings
+/// emitted in it (whoever sent it). The Console names a Wedgie in ENS only after this says so, since its records
+/// point at the binding (`knock.poh`, `knock.nullifier`). Logs can't be searched for here: the RPC answers
+/// `eth_getLogs` for 100 blocks at a time, so the Console remembers its bindings' transactions.
+pub async fn bound(
+    State(app): State<Arc<App>>,
+    Json(q): Json<BoundRequest>,
+) -> Result<Json<Value>, Refusal> {
+    let tx = B256::from_slice(&bytes_of(&q.tx, 32, "tx")?);
+    app.lookups.take()?;
+    let receipt = app
+        .chain
+        .get_transaction_receipt(tx)
+        .await
+        .map_err(|e| chain_trouble(&app, "reading a receipt", e))?
+        .ok_or_else(|| {
+            Refusal::new(
+                StatusCode::NOT_FOUND,
+                "unknown",
+                format!("World Chain has no transaction {tx}"),
+            )
+        })?;
+    let (env, b) = receipt
+        .inner
+        .logs()
+        .iter()
+        .filter(|_| receipt.status())
+        .find_map(|l| {
+            let env = app.envs().into_iter().find(|e| e.binding == l.address())?;
+            Some((env, l.log_decode::<KnockBinding::Bound>().ok()?.inner.data))
+        })
+        .ok_or_else(|| {
+            Refusal::new(
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "not_a_binding",
+                format!("transaction {tx} bound nothing with Knock's KnockBinding"),
+            )
+        })?;
+    Ok(Json(json!({
+        "environment": env.name,
+        "chainId": CHAIN_ID,
+        "contract": env.binding,
+        "tx": tx,
+        "block": receipt.block_number,
+        "poh": format!("eip155:{CHAIN_ID}:tx:{tx}"),
+        "bound": {
+            "nullifier": word(b.nullifier),
+            "keyHash": b.keyHash,
+            "expiresAtMin": b.expiresAtMin,
+        },
     })))
 }
 

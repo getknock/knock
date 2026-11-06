@@ -1,5 +1,6 @@
 //! knockd: Knock's signer. It signs World ID RP contexts for the `knock-bind` action (`/rp-context`), and sends
-//! `KnockBinding.bind()` for a device that said yes on its own screen, the gas key paying (`/bind`).
+//! `KnockBinding.bind()` for a device that said yes on its own screen, the gas key paying (`/bind`). It also reads
+//! a binding back from its transaction (`/bound`), for the Console to name the device in ENS with.
 //!
 //! Its secrets are read here and nowhere else (PLAN.md §5): the World RP key from its key file, and the gas key
 //! and World Chain RPC from `.env`, as are the app's World IDs. None of them is ever logged or sent back, and
@@ -66,6 +67,7 @@ pub struct App {
     contexts: Window,
     pub simulations: Window,
     pub sends: Window,
+    pub lookups: Window,
     /// One bind at a time: the gas key's nonces stay in order.
     pub sending: tokio::sync::Mutex<()>,
 }
@@ -79,6 +81,11 @@ impl App {
                 "environment: staging (Simulator proofs) or production",
             )),
         }
+    }
+
+    /// Both environments' contracts: where a Bound log can come from.
+    pub fn envs(&self) -> [&Env; 2] {
+        [&self.production, &self.staging]
     }
 
     /// An error's text with no URL in it: the RPC's URL carries its key.
@@ -346,6 +353,7 @@ async fn main() -> anyhow::Result<()> {
         contexts: Window::new(120, Duration::from_secs(3600)),
         simulations: Window::new(120, Duration::from_secs(3600)),
         sends: Window::new(12, Duration::from_secs(3600)),
+        lookups: Window::new(120, Duration::from_secs(3600)),
         sending: tokio::sync::Mutex::new(()),
     };
     if std::env::var("KNOCKD_SKIP_CHECKS").is_err() {
@@ -369,6 +377,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/health", get(health))
         .route("/rp-context", post(rp_context))
         .route("/bind", post(bind::bind))
+        .route("/bound", post(bind::bound))
         .layer(DefaultBodyLimit::max(16 * 1024))
         .layer(cors)
         .with_state(Arc::new(app));
