@@ -68,3 +68,10 @@ export type Bound = {
 export function bind(body: BindBody) {
   return post<Bound>('/bind', body)
 }
+
+export type BindingOnChain = Omit<Bound, 'gasUsed'>
+
+/** A binding read back from its transaction: the Bound log one of our KnockBindings emitted in it. */
+export function boundTx(tx: Hex) {
+  return post<BindingOnChain>('/bound', { tx })
+}

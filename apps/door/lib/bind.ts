@@ -8,6 +8,7 @@ import { type Hex, toHex } from 'viem'
 import { CHAIN_ID, type Environment, KNOCK_BINDING } from './deployments'
 import { type Bound, bind, rpContext } from './knockd'
 import { knockQr } from './qr'
+import { Stopped, refused } from './stopped'
 import type { Message, Wedgie } from './wedgie'
 
 export type Step =
@@ -16,15 +17,7 @@ export type Step =
   | { step: 'device'; nullifier: Hex }
   | { step: 'chain' }
 
-/** A refusal along the way, said for people. */
-export class Stopped extends Error {}
-
-function refused(m: Message, what: string): never {
-  const why = typeof m.why === 'string' ? `: ${m.why}` : ''
-  if (m.error === 'rejected') throw new Stopped(`Red on the Wedgie: no ${what}.`)
-  if (m.error === 'timeout') throw new Stopped(`Nobody pressed on the Wedgie: no ${what}.`)
-  throw new Stopped(`The Wedgie said ${String(m.error ?? m.type)}${why}`)
-}
+export { Stopped }
 
 export async function bindWedgie(
   w: Wedgie,

@@ -104,6 +104,12 @@ a {
     gap: 4rem;
     align-items: start;
   }
+
+  /* The Wedgie stays in view down the page: naming it and killing it ask for presses too. */
+  .console > section:first-child {
+    position: sticky;
+    top: 1rem;
+  }
 }
 
 /* The Wedgie, drawn as a thing you hold: its screen mirrors the real one, its buttons light up on your turn. */
@@ -433,4 +439,122 @@ h2 {
 a.primary {
   display: inline-block;
   text-decoration: none;
+}
+
+/* Naming and the kill switch: parts of one setup, under the binding */
+.part + .part {
+  margin-top: 3.5rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid #fefefe33;
+}
+
+.part h3 {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1.0625rem;
+}
+
+.part input {
+  min-width: 0;
+  padding: 0.65rem 0.85rem;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: var(--deep);
+  color: var(--white);
+  font: inherit;
+}
+
+.part input::placeholder {
+  color: #d9d1f799;
+}
+
+.part input:focus-visible {
+  outline: none;
+  border-color: var(--door);
+}
+
+.part input.hex,
+.part .field input.hex {
+  font-family: var(--mono), ui-monospace, monospace;
+  flex: 1 1 18rem;
+}
+
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.name-row input {
+  flex: 1 1 0;
+}
+
+.name-row span {
+  font-weight: 800;
+  font-size: 1.25rem;
+}
+
+.hint {
+  margin: 0.5rem 0 1.25rem;
+  color: var(--soft);
+  font-size: 0.9375rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0 0 1rem;
+}
+
+.field span {
+  font-weight: 700;
+}
+
+.wallet {
+  margin: 0 0 0.5rem;
+}
+
+.wallet .dot {
+  display: inline-block;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+}
+
+.wallet .quiet img {
+  margin-right: 0.35rem;
+  vertical-align: -4px;
+}
+
+.sent {
+  margin: 0.5rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9375rem;
+}
+
+/* The kill switch is the one red thing on the page that isn't a Wedgie button */
+.danger h2 {
+  color: var(--white);
+}
+
+.danger .lede {
+  border-left: 6px solid var(--stop);
+  padding-left: 1rem;
+}
+
+.kill {
+  padding: 0.8rem 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--stop);
+  color: var(--white);
+  font: inherit;
+  font-weight: 800;
+  box-shadow: 0 4px 0 var(--frame);
+  cursor: pointer;
+}
+
+.kill:disabled {
+  background: var(--deep);
+  color: var(--soft);
+  box-shadow: none;
+  cursor: not-allowed;
 }

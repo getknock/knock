@@ -9,6 +9,7 @@ export type View =
   | { kind: 'home'; name: string | null; human: boolean }
   | { kind: 'qr'; n: number; bits: string }
   | { kind: 'bind'; key: string; nullifier: string }
+  | { kind: 'become'; name: string }
 
 const INK = '#000000'
 const MUTED = '#6b6b6b'
@@ -44,12 +45,23 @@ function draw(c: CanvasRenderingContext2D, view: View) {
     text(view.human ? 'bound to a human' : 'not bound yet', 164, 13, MUTED, 400)
     return
   }
-  // The BIND page: what it binds, in words, and whose question it is
-  logo(p, 71, 6, 2)
-  c.fillStyle = INK
+  // The BIND and BECOME pages: what it does, in words, and whose question it is
+  const title = view.kind === 'become' ? 'BECOME' : 'BIND'
   c.font = `800 18px ${mono.style.fontFamily}`
+  const w = c.measureText(title).width
+  logo(p, Math.round(120 - (34 + w) / 2), 6, 2)
+  c.fillStyle = INK
   c.textBaseline = 'top'
-  c.fillText('BIND', 105, 11)
+  c.fillText(title, Math.round(120 - (34 + w) / 2) + 34, 11)
+  text('the Knock Console asks', 214, 11, MUTED, 400)
+  if (view.kind === 'become') {
+    const [first, ...rest] = view.name.split('.')
+    text(first, 58, 22)
+    if (rest.length) text(`.${rest.join('.')}`, 88, 13, MUTED, 400)
+    text('its key goes in ENS under', 130, 13)
+    text('this name, for anyone', 151, 13)
+    return
+  }
   const lines: [string, string][] = [
     ["this wedgie's key", INK],
     [short(view.key), MUTED],
@@ -59,7 +71,6 @@ function draw(c: CanvasRenderingContext2D, view: View) {
     ['on World Chain', INK],
   ]
   lines.forEach(([t, color], i) => text(t, 52 + i * 21, 13, color, color === INK ? 700 : 400))
-  text('the Knock Console asks', 214, 11, MUTED, 400)
 }
 
 export function Screen({ view, waitingForGreen }: { view: View; waitingForGreen: boolean }) {
@@ -80,6 +91,8 @@ export function Screen({ view, waitingForGreen }: { view: View; waitingForGreen:
       ? 'The Wedgie shows a QR code for World ID'
       : view.kind === 'bind'
         ? "The Wedgie asks: bind this wedgie's key to one human's World ID?"
+        : view.kind === 'become'
+          ? `The Wedgie asks: become ${view.name}? Its key goes in ENS under this name.`
         : view.kind === 'home'
           ? `The Wedgie's home screen: ${view.name ?? 'Knock'}`
           : 'No Wedgie connected'

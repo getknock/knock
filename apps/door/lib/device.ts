@@ -1,7 +1,10 @@
-/** Meeting the Wedgie: Knock runs on it, has its key, and signs a fresh hello with it. */
-import { digest, verifySignature } from '@knock-dev/protocol'
+/**
+ * The Wedgie's side of things: meeting it (Knock runs, has its key, and signs a fresh hello with it), BECOME for a
+ * name, and what it's told after: its name and binding (knock_confirm), or to forget them (the kill switch).
+ */
+import { deviceNode, digest, verifySignature } from '@knock-dev/protocol'
 import { type Hex, toHex } from 'viem'
-import { Stopped } from './bind'
+import { Stopped, refused } from './stopped'
 import type { Wedgie } from './wedgie'
 
 export type Device = {
@@ -13,6 +16,8 @@ export type Device = {
   nullifier: Hex | null
   poh: string | null
   counter: number
+  /** Its security class for knock.sc (S1: any installed app can use the chip). */
+  sc: string
 }
 
 const KEYLESS: Record<string, string> = {
@@ -47,5 +52,46 @@ export async function meet(w: Wedgie): Promise<Device> {
     nullifier: (info.nullifier as Hex) ?? null,
     poh: (info.poh as string) ?? null,
     counter: Number(info.counter ?? 0),
+    sc: typeof info.sc === 'string' ? info.sc : 'S1',
   }
+}
+
+/** BECOME on the Wedgie's screen: a green press signs KnockEnroll(nonce, name, key), the device's yes to the name.
+ *  Its chip's vouch for the key comes back with it (att). */
+export async function become(w: Wedgie, name: string, key: Hex) {
+  const nonce = toHex(crypto.getRandomValues(new Uint8Array(32)))
+  const m = await w.ask({ type: 'knock_enroll', nonce, name }, 130_000)
+  if (m.type !== 'knock_enrolled') {
+    if (m.error === 'already_enrolled')
+      throw new Stopped(`The Wedgie is bound as another name: ${String(m.why ?? '')}. Use the kill switch on it first.`)
+    refused(m, 'name')
+  }
+  const d = digest('KnockEnroll', { nonce, name, key })
+  if (
+    m.name !== name ||
+    !same(m.node, deviceNode(name)) ||
+    !same(m.key, key) ||
+    !same(m.digest, d) ||
+    !verifySignature(d, m.r as Hex, m.s as Hex, key)
+  )
+    throw new Stopped("The Wedgie's BECOME isn't signed by its key for this name.")
+  return { att: m.att }
+}
+
+/** What ENS and World Chain now say, for the Wedgie's home screen (its Human badge) and its next passes. */
+export async function confirmOn(w: Wedgie, c: { name: string; nullifier: Hex; poh: string }) {
+  const m = await w.ask({ type: 'knock_confirm', ...c, status: 'active' })
+  if (m.type !== 'knock_confirmed' || !same(m.node, deviceNode(c.name))) refused(m, 'confirmation')
+}
+
+/** The kill switch's last step: the Wedgie forgets its name and binding. Knock 4 had no knock_forget, so there
+ *  its name is kept, marked revoked, with no binding. */
+export async function forgetOn(w: Wedgie, name: string | null) {
+  const m = await w.ask({ type: 'knock_forget' })
+  if (m.type === 'knock_forgotten') return
+  if (m.error === 'bad_request' && name) {
+    const r = await w.ask({ type: 'knock_confirm', name, status: 'revoked' })
+    if (r.type === 'knock_confirmed') return
+  }
+  refused(m, 'forgetting')
 }
