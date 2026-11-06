@@ -1,26 +1,28 @@
 /**
- * The Human Club's bot: it tries to get in without a Wedgie, the ways a bot would, against the club's verifier,
- * and says where each try bounced. It exits 1 if any try got in, since that would be a hole.
+ * The Human Club's bot: it tries to get in without a Wedgie, the ways a bot would, through the club's own API, and
+ * says where each try bounced. It exits 1 if any try got in, since that would be a hole.
  *
- *   bun run bot [name] [verifier]     (defaults: wedgie.itzraj.eth, http://localhost:8788)
+ *   bun run bot [name] [club]     (defaults: hello.itzraj.eth, http://localhost:3001)
  */
 import { NO_HUMAN_REF, P256_N, deviceNode, digest, signDigest } from '@knock-dev/protocol'
 import { type Hex, toHex } from 'viem'
 
-const name = process.argv[2] ?? 'wedgie.itzraj.eth'
-const verifier = process.argv[3] ?? process.env.NEXT_PUBLIC_VERIFIER ?? 'http://localhost:8788'
-const club = 'http://localhost:3001'
+const name = process.argv[2] ?? 'hello.itzraj.eth'
+const club = process.argv[3] ?? 'http://localhost:3001'
 
 const random = (): Hex => toHex(crypto.getRandomValues(new Uint8Array(32)))
 const botKey = random() // a key of its own: P-256, made a moment ago, in no ENS record
+const headers = { 'content-type': 'application/json', origin: club }
 
+/** A challenge from the club, for knocking in */
 async function challenge(): Promise<Hex> {
-  const r = await fetch(`${verifier}/challenge`, { method: 'POST', headers: { origin: club } })
-  if (!r.ok) throw new Error(`the verifier gave no challenge (${r.status})`)
-  return (await r.json()).challenge
+  const r = await fetch(`${club}/api/knock/challenge`, { method: 'POST', headers, body: JSON.stringify({ intent: { act: 'in' } }) })
+  const j = await r.json().catch(() => null)
+  if (!j?.ok) throw new Error(`the club gave no challenge (${r.status}): ${j?.why ?? ''}`)
+  return j.challenge
 }
 
-/** A knock signed by the bot's own key, as `name`, for `origin`. */
+/** A knock signed by the bot's own key, as `name`, for `origin` */
 function forged(c: Hex, origin = club, counter = 1) {
   const message = {
     challenge: c,
@@ -36,18 +38,14 @@ function forged(c: Hex, origin = club, counter = 1) {
 }
 
 async function attempt(what: string, assertion: unknown) {
-  const r = await fetch(`${verifier}/verify`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', origin: club },
-    body: JSON.stringify({ assertion, action: 'enter' }),
-  })
-  const v = await r.json()
-  const said = v.ok ? 'GOT IN' : `bounced at check ${v.check}: ${v.why}`
+  const r = await fetch(`${club}/api/knock`, { method: 'POST', headers, body: JSON.stringify({ assertion }) })
+  const v = await r.json().catch(() => ({ why: `the club said ${r.status}` }))
+  const said = v.ok || v.passed ? 'GOT IN' : `bounced at check ${v.check} (${r.status}): ${v.why}`
   console.log(`  ${what.padEnd(40)} ${said}`)
-  return Boolean(v.ok)
+  return Boolean(v.ok || v.passed)
 }
 
-console.log(`The Human Club's bot tries to get in as ${name}, without its Wedgie (verifier ${verifier}):`)
+console.log(`The Human Club's bot tries to get in as ${name}, without its Wedgie (${club}):`)
 const tries: [string, () => Promise<unknown>][] = [
   ['its own key, a fresh challenge', async () => forged(await challenge())],
   ['a knock signed for another site', async () => forged(await challenge(), 'https://evil.example')],

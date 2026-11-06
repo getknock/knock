@@ -1,14 +1,19 @@
-/* The club's door is bottle green; the bouncer's list is plain white paper, ticked in ballpoint blue; a no is the
-   red stamp; the one thing to do is the brass knocker. */
+/* The club's door is bottle green, and its petitions are paper notices pinned to it with brass pins. The bouncer's
+   list ticks in ballpoint blue; a no is the red stamp; the one thing to do is the brass knocker. */
 :root {
   --door: #12382c;
   --door-deep: #0b271f;
+  --door-line: #ffffff14;
   --paper: #fbfaf5;
+  --paper-edge: #e9e5d6;
   --ink: #1c2230;
+  --ink-soft: #1c2230b3;
   --pen: #2346b5;
   --no: #c4122f;
   --brass: #d4a72c;
+  --brass-deep: #8a6a12;
   --faint: #1c223066;
+  --on-door: #fbfaf5cc;
 }
 
 * {
@@ -25,6 +30,8 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   font-size: 1.0625rem;
   line-height: 1.55;
 }
@@ -39,6 +46,16 @@ a {
   outline-offset: 3px;
 }
 
+h1,
+h2,
+h3 {
+  font-family: var(--sign), sans-serif;
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: 0.005em;
+  margin: 0;
+}
+
 .sr {
   position: absolute;
   width: 1px;
@@ -48,97 +65,718 @@ a {
   white-space: nowrap;
 }
 
-.club {
-  display: grid;
-  justify-items: center;
-  gap: 2rem;
-  padding: clamp(2rem, 7vh, 4.5rem) 1rem 3rem;
+.hex {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
 }
 
-/* The sign over the door: the one big thing on the page */
-.sign {
-  text-align: center;
+/* The bar over the door */
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.5rem;
+  padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
+  background: var(--door-deep);
+  border-bottom: 1px solid var(--door-line);
 }
 
-.sign h1 {
-  margin: 0;
+.club-name {
   font-family: var(--sign), sans-serif;
-  font-size: clamp(3.5rem, 13vw, 7.5rem);
   font-weight: 900;
-  line-height: 0.85;
-  letter-spacing: 0.01em;
+  font-size: 1.6rem;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.bar nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+}
+
+.bar nav a {
+  text-decoration: none;
+  color: var(--on-door);
+}
+
+.bar nav a:hover,
+.bar nav a.me {
   color: var(--paper);
-  text-shadow: 0 0 1px var(--paper), 0 0 22px #fbfaf540;
+  text-decoration: underline;
 }
 
-.sign p {
-  margin: 0.75rem 0 0;
-  font-size: 1.25rem;
-  color: #fbfaf5cc;
+.knock-in {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
 }
 
-/* The list: a sheet on the bouncer's clipboard */
-.list {
-  position: relative;
-  width: min(100%, 36rem);
-  padding: 1.75rem clamp(1.25rem, 5vw, 2.5rem) 2rem;
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--ink);
-  box-shadow: 0 18px 0 -8px var(--door-deep), 0 30px 60px #0007;
+.text-btn {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--on-door);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
-.how {
-  margin: 0 0 1.5rem;
-}
-
-.knock {
-  display: block;
-  width: 100%;
-  padding: 1rem 1.5rem;
+/* The brass knocker: the one thing to do */
+.knocker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1.6rem;
   border: 0;
   border-radius: 999px;
   background: var(--brass);
   color: var(--ink);
   font: inherit;
   font-family: var(--sign), sans-serif;
-  font-size: 1.75rem;
+  font-size: 1.45rem;
   font-weight: 900;
-  line-height: 1.1;
-  box-shadow: 0 5px 0 #8a6a12;
+  line-height: 1.05;
+  text-decoration: none;
+  box-shadow: 0 5px 0 var(--brass-deep);
   cursor: pointer;
 }
 
-.knock:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow: 0 2px 0 #8a6a12;
+.knocker.small {
+  padding: 0.4rem 1.1rem;
+  font-size: 1.15rem;
+  box-shadow: 0 3px 0 var(--brass-deep);
 }
 
-.knock:disabled {
+.knocker:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 var(--brass-deep);
+}
+
+.knocker:disabled {
   background: #e9e2c8;
   color: #1c2230aa;
   box-shadow: none;
   cursor: progress;
 }
 
-.list h2 {
-  margin: 2rem 0 0.5rem;
-  font-size: 1rem;
-  font-weight: 700;
+.knocker img {
+  border-radius: 4px;
 }
 
-.checks {
+.plain {
+  display: inline-block;
+  padding: 0.7rem 1.3rem;
+  border: 2px solid currentColor;
+  border-radius: 999px;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.hint {
+  margin: 0.5rem 0 0;
+  color: var(--on-door);
+  font-size: 0.875rem;
+}
+
+.paper .hint,
+.panel .hint {
+  color: var(--ink-soft);
+}
+
+.hint.out {
+  color: #ffb3bf;
+}
+
+main {
+  flex: 1;
+  width: min(100%, 76rem);
+  margin: 0 auto;
+  padding: clamp(1.5rem, 5vw, 3.5rem) clamp(1rem, 4vw, 2.5rem) 4rem;
+}
+
+/* The sign on the door: the one big thing on the home page */
+.hero {
+  max-width: 52rem;
+  margin-bottom: clamp(2.5rem, 7vw, 4.5rem);
+}
+
+.hero h1 {
+  font-size: clamp(3.6rem, 12vw, 8.5rem);
+  line-height: 0.82;
+  color: var(--paper);
+  text-shadow:
+    0 0 1px var(--paper),
+    0 0 26px #fbfaf533;
+}
+
+.hero.small h1 {
+  font-size: clamp(2.6rem, 8vw, 4.5rem);
+  overflow-wrap: anywhere;
+}
+
+.lede {
+  max-width: 40rem;
+  margin: 1.25rem 0 0;
+  font-size: 1.25rem;
+  color: var(--on-door);
+}
+
+.tally {
+  margin: 0.75rem 0 0;
+  color: var(--brass);
+  font-weight: 600;
+}
+
+.ctas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  margin: 2rem 0 0;
+}
+
+/* The board, and the notices pinned to it */
+.board {
+  margin-bottom: clamp(2.5rem, 6vw, 4rem);
+}
+
+.board-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.board-head h1,
+.board-head h2 {
+  font-size: clamp(2.2rem, 5vw, 3rem);
+}
+
+.board-head nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.25rem;
+}
+
+.board-head nav a {
+  color: var(--on-door);
+}
+
+.board-head nav a[aria-current='page'] {
+  color: var(--paper);
+  font-weight: 700;
+  text-decoration-thickness: 2px;
+}
+
+.board-note {
+  margin: -0.5rem 0 1.5rem;
+  color: var(--on-door);
+  max-width: 44rem;
+}
+
+.notices {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17.5rem), 1fr));
+  gap: 2.25rem 1.75rem;
+  margin: 0;
+  padding: 0.75rem 0 0;
+  list-style: none;
+}
+
+.notice {
+  position: relative;
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow:
+    0 1px 0 var(--paper-edge),
+    0 14px 28px #0006;
+  transform: rotate(-0.7deg);
+  transition: transform 0.15s ease-out;
+}
+
+.notice:nth-child(3n + 2) {
+  transform: rotate(0.6deg);
+}
+
+.notice:nth-child(3n) {
+  transform: rotate(-0.25deg);
+}
+
+.notice:hover,
+.notice:focus-within {
+  transform: rotate(0deg) translateY(-2px);
+}
+
+/* The brass pin */
+.notice::before {
+  content: '';
+  position: absolute;
+  top: -0.45rem;
+  left: 50%;
+  width: 0.95rem;
+  height: 0.95rem;
+  margin-left: -0.475rem;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #f6dc8a, var(--brass) 45%, var(--brass-deep));
+  box-shadow: 0 2px 3px #0008;
+}
+
+.notice > a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  height: 100%;
+  padding: 1.6rem 1.35rem 1.25rem;
+  text-decoration: none;
+}
+
+.notice h3 {
+  font-size: 1.9rem;
+  overflow-wrap: anywhere;
+}
+
+.notice > a:hover h3 {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+}
+
+.to {
+  margin: 0;
+  color: var(--ink-soft);
+  font-style: italic;
+  overflow-wrap: anywhere;
+}
+
+.notice .count,
+.notice .by {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.notice .by {
+  margin-top: auto;
+  color: var(--ink-soft);
+}
+
+.goal,
+.recent {
+  color: var(--ink-soft);
+}
+
+.notice.won,
+.notice.closed {
+  opacity: 0.86;
+}
+
+.progress {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: #1c22301a;
+  overflow: hidden;
+}
+
+.progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--pen);
+}
+
+/* A rubber stamp across what's won or closed */
+.stamp {
+  position: absolute;
+  top: 1.1rem;
+  right: 0.9rem;
+  margin: 0;
+  padding: 0.05rem 0.7rem 0.15rem;
+  border: 3px solid currentColor;
+  border-radius: 6px;
+  font-family: var(--sign), sans-serif;
+  font-size: 1.6rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(-8deg);
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+.stamp.won,
+.stamp.in {
+  color: var(--pen);
+}
+
+.stamp.closed {
+  color: var(--no);
+}
+
+.empty {
+  max-width: 34rem;
+  padding: 1.5rem 1.75rem;
+  border: 2px dashed var(--door-line);
+  border-radius: 6px;
+  color: var(--on-door);
+}
+
+.empty p {
+  margin: 0;
+}
+
+.empty p + p {
+  margin-top: 0.5rem;
+}
+
+.how {
+  padding-top: 2.5rem;
+  border-top: 1px solid var(--door-line);
+}
+
+.how h2 {
+  font-size: clamp(2rem, 4.5vw, 2.6rem);
+  margin-bottom: 1.5rem;
+}
+
+.points {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1.5rem 2.5rem;
+}
+
+.points h3 {
+  font-size: 1.5rem;
+  color: var(--brass);
+}
+
+.points p {
+  margin: 0.5rem 0 0;
+  color: var(--on-door);
+}
+
+/* A petition's or fundraiser's own page: the notice, and the clipboard beside it */
+.page {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  grid-template-areas:
+    'paper panel'
+    'sigs panel';
+  align-items: start;
+  gap: 2.5rem clamp(1.5rem, 4vw, 3rem);
+}
+
+.page.narrow {
+  display: block;
+  width: min(100%, 46rem);
+}
+
+.paper {
+  grid-area: paper;
+  position: relative;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  border-radius: 3px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow:
+    0 1px 0 var(--paper-edge),
+    0 18px 40px #0006;
+}
+
+.paper h1 {
+  margin: 0.4rem 0 0.75rem;
+  font-size: clamp(2.4rem, 6vw, 3.6rem);
+  overflow-wrap: anywhere;
+}
+
+.paper .by {
+  margin: 0 0 1.5rem;
+  color: var(--ink-soft);
+}
+
+.paper .stamp {
+  top: 1.5rem;
+  right: 1.5rem;
+  font-size: 2.6rem;
+  border-width: 4px;
+}
+
+.body {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+  font-size: 1.125rem;
+  line-height: 1.65;
+  max-width: 40rem;
+}
+
+.panel {
+  grid-area: panel;
+  position: sticky;
+  top: 1.5rem;
+  padding: 1.75rem clamp(1.25rem, 3vw, 1.75rem) 1.5rem;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow:
+    0 18px 0 -8px var(--door-deep),
+    0 30px 60px #0007;
+}
+
+/* The clipboard's clip */
+.panel::before {
+  content: '';
+  position: absolute;
+  top: -0.7rem;
+  left: 50%;
+  width: 6.5rem;
+  height: 1.3rem;
+  margin-left: -3.25rem;
+  border-radius: 5px 5px 3px 3px;
+  background: linear-gradient(#5b6170, #2c313d);
+  box-shadow: 0 2px 4px #0006;
+}
+
+.panel .count {
+  margin: 0.6rem 0 1.25rem;
+}
+
+.panel .count strong {
+  font-family: var(--sign), sans-serif;
+  font-size: 2.1rem;
+  font-weight: 900;
+}
+
+.closed-note,
+.done-note {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-left: 5px solid var(--pen);
+  background: #2346b512;
+}
+
+.sigs {
+  grid-area: sigs;
+}
+
+.sigs h2 {
+  font-size: clamp(2rem, 4.5vw, 2.6rem);
+  margin-bottom: 1rem;
+}
+
+.sigs ol {
   margin: 0;
   padding: 0;
   list-style: none;
+  border-top: 1px solid var(--door-line);
+}
+
+.sigs li {
+  padding: 0.9rem 0;
+  border-bottom: 1px solid var(--door-line);
+}
+
+.sigs p {
+  margin: 0;
+}
+
+.who time {
+  margin-left: 0.4rem;
+  color: var(--on-door);
+  font-size: 0.9rem;
+}
+
+.reason {
+  margin-top: 0.3rem !important;
+  color: var(--paper);
+  overflow-wrap: anywhere;
+}
+
+.reason::before {
+  content: '“';
+}
+
+.reason::after {
+  content: '”';
+}
+
+.proof {
+  margin-top: 0.3rem !important;
+  color: var(--on-door);
+  font-size: 0.875rem;
+}
+
+/* Forms, on paper */
+.form {
+  display: grid;
+  gap: 1rem;
+}
+
+.form + .form {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #1c22301f;
+}
+
+.form label {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.form label > span,
+.form legend,
+.form .legend {
+  font-weight: 600;
+}
+
+.form .legend {
+  margin: 0;
+}
+
+.form input:not([type='checkbox'], [type='radio']),
+.form textarea {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 2px solid #1c223059;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  font: inherit;
+}
+
+.form textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+
+.form input:focus-visible,
+.form textarea:focus-visible {
+  outline: 3px solid var(--brass);
+  outline-offset: 1px;
+  border-color: var(--ink);
+}
+
+.form .check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+}
+
+.form .check input {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0.2rem 0 0;
+  accent-color: var(--pen);
+}
+
+.form .check span {
+  font-weight: 400;
+}
+
+.form fieldset {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.form legend {
+  margin-bottom: 0.5rem;
+}
+
+.fine {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.875rem;
+}
+
+.form.given p {
+  margin: 0;
+}
+
+.form.given .stamp {
+  position: static;
+  display: inline-block;
+  justify-self: start;
+  font-size: 2.4rem;
+}
+
+.wallets {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.kinds {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 1.75rem;
+}
+
+.kinds a {
+  padding: 0.35rem 0.9rem;
+  border: 2px solid #1c223040;
+  border-radius: 999px;
+  text-decoration: none;
+}
+
+.kinds a[aria-current='page'] {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.page.narrow .paper h1 {
+  margin-top: 0;
+}
+
+/* A knock: the knocker, then the bouncer's list ticked down */
+.act {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.act .knocker {
+  width: 100%;
+}
+
+.said {
+  margin: 0;
+  padding: 0.65rem 0.9rem;
+  border-left: 5px solid var(--ink);
+  background: #1c22300d;
+}
+
+.said.out {
+  border-color: var(--no);
+  background: #c4122f12;
+}
+
+.said button {
+  margin-top: 0.6rem;
+}
+
+.checks {
+  margin: 0.25rem 0 0;
+  padding: 0;
+  list-style: none;
   counter-reset: check;
+  font-size: 0.95rem;
 }
 
 .checks li {
   display: grid;
-  grid-template-columns: 2rem 1.75rem minmax(0, 1fr);
+  grid-template-columns: 1.6rem 1.6rem minmax(0, 1fr);
   align-items: center;
-  padding: 0.45rem 0;
+  padding: 0.35rem 0;
   border-bottom: 1px solid #1c22301f;
   counter-increment: check;
 }
@@ -150,8 +788,8 @@ a {
 }
 
 .mark {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1.15rem;
+  height: 1.15rem;
 }
 
 /* A tick in pen, a cross in red, a dash for what wasn't asked; drawn in turn, down the list */
@@ -159,7 +797,7 @@ a {
 .checks .fail .mark,
 .checks .skip .mark {
   animation: mark 0.18s ease-out both;
-  animation-delay: calc(var(--i) * 140ms);
+  animation-delay: calc(var(--i) * 120ms);
 }
 
 .checks .pass .mark {
@@ -194,71 +832,48 @@ a {
   }
 }
 
-/* The verdict: a rubber stamp, landing after the last check */
-.verdict {
-  margin-top: 1.5rem;
+.foot {
+  padding: 1.75rem clamp(1rem, 4vw, 2.5rem) 2.25rem;
+  border-top: 1px solid var(--door-line);
+  background: var(--door-deep);
+  color: var(--on-door);
+  font-size: 0.9rem;
 }
 
-.verdict p {
+.foot p {
+  max-width: 48rem;
   margin: 0;
 }
 
-.stamp {
-  display: inline-block;
-  margin-bottom: 0.75rem !important;
-  padding: 0.1rem 0.9rem 0.2rem;
-  border: 4px solid currentColor;
-  border-radius: 8px;
-  font-family: var(--sign), sans-serif;
-  font-size: 3rem;
-  font-weight: 900;
-  line-height: 1;
-  transform: rotate(-6deg);
-  animation: stamp 0.22s cubic-bezier(0.2, 1.6, 0.4, 1) both;
-  animation-delay: calc(8 * 140ms);
-}
-
-.stamp.in {
-  color: var(--pen);
-}
-
-.stamp.out {
-  color: var(--no);
-}
-
-@keyframes stamp {
-  from {
-    opacity: 0;
-    transform: rotate(-6deg) scale(2.2);
+@media (max-width: 52rem) {
+  .page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'paper'
+      'panel'
+      'sigs';
   }
-}
 
-.hex {
-  font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
-}
-
-.nothing {
-  margin: 1.5rem 0 0;
-  padding: 0.75rem 1rem;
-  border-left: 5px solid var(--no);
-  background: #c4122f12;
-}
-
-.small {
-  max-width: 36rem;
-  color: #fbfaf5aa;
-  font-size: 0.875rem;
-  text-align: center;
+  .panel {
+    position: relative;
+    top: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .checks .mark,
-  .stamp {
+  .checks .mark {
     animation: none !important;
   }
 
-  .knock:active:not(:disabled) {
+  .notice,
+  .notice:hover,
+  .notice:focus-within,
+  .knocker:active:not(:disabled) {
+    transition: none;
     transform: none;
   }
+}
+
+.sigs .quiet {
+  color: var(--on-door);
 }

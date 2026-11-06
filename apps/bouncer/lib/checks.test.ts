@@ -1,26 +1,43 @@
 import { describe, expect, test } from 'bun:test'
-import { CHECKS, type Knocked, type Mark, marks, outcome } from './checks'
+import { type Mark, checksFor, marks } from './checks'
 
-const knocked = { name: 'wedgie.itzraj.eth' } as Knocked
+const done = { act: 'sign' as const, petition: 1, count: 2 }
 
 describe('the list', () => {
-  test('let in: every check passed, and fresh proof was never asked', () => {
-    expect(marks(outcome({ ok: true, knock: knocked }))).toEqual(['pass', 'pass', 'pass', 'pass', 'pass', 'pass', 'skip', 'pass'])
+  test('signed: every check passed, and a fresh proof was never asked', () => {
+    expect(marks({ kind: 'in', name: 'a.eth', done }, 'sign')).toEqual(['pass', 'pass', 'pass', 'pass', 'pass', 'pass', 'skip', 'pass'])
+  })
+
+  test('knocked in, or closing: once per human is not asked', () => {
+    expect(marks({ kind: 'in', name: 'a.eth', done: { act: 'in' } }, 'in')).toEqual([
+      'pass', 'pass', 'pass', 'pass', 'pass', 'pass', 'skip', 'skip',
+    ])
+    expect(checksFor('close')[7]).toBe('Once per human (not asked here)')
   })
 
   test('bounced at a check: the ones before passed, it failed, none after ran', () => {
-    expect(marks(outcome({ ok: false, check: 3, error: 'revoked', why: '' }))).toEqual([
+    expect(marks({ kind: 'bounced', check: 3, error: 'revoked', why: '' }, 'sign')).toEqual([
       'pass', 'pass', 'fail', 'todo', 'todo', 'todo', 'todo', 'todo',
     ])
-    expect(marks(outcome({ ok: false, check: 8, error: 'already_entered', why: '' }))).toEqual([
+    expect(marks({ kind: 'bounced', check: 8, error: 'already_entered', why: '' }, 'sign')).toEqual([
       'pass', 'pass', 'pass', 'pass', 'pass', 'pass', 'skip', 'fail',
     ])
-    expect(marks(outcome({ ok: false, check: 6, error: 'no_binding', why: '' }))[6]).toBe('todo')
   })
 
-  test("no knock, or the verifier's own trouble: nothing checked", () => {
-    const none = CHECKS.map((): Mark => 'todo')
-    expect(marks({ kind: 'no-knock', code: 'closed', why: '' })).toEqual(none)
-    expect(marks(outcome({ ok: false, check: 0, error: 'busy', why: '' }))).toEqual(none)
+  test('the club said no after the checks: they all passed', () => {
+    expect(marks({ kind: 'declined', name: 'a.eth', error: 'closed', why: '' }, 'sign').every((m) => m !== 'fail')).toBe(true)
+  })
+
+  test('no knock, or none yet: nothing checked', () => {
+    const none: Mark[] = ['todo', 'todo', 'todo', 'todo', 'todo', 'todo', 'todo', 'todo']
+    expect(marks({ kind: 'no-knock', code: 'closed', why: '' }, 'sign')).toEqual(none)
+    expect(marks(null, 'start')).toEqual(none)
+  })
+
+  test("check 8, in each act's words", () => {
+    expect(checksFor('sign')[7]).toBe('Their first signature on this petition')
+    expect(checksFor('start')[7]).toBe('Their first new petition today')
+    expect(checksFor('raise')[7]).toBe('Their first new fundraiser today')
+    expect(marks({ kind: 'bounced', check: 8, error: 'already_entered', why: '' }, 'raise')[7]).toBe('fail')
   })
 })
