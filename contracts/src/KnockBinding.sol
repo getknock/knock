@@ -46,6 +46,10 @@ interface IWorldIDVerifier {
 ///   killed, is a session proof for that session. Both bind for the same human: the nullifier the session was
 ///   made with. Sites see one human however many devices they have (D24).
 ///
+///   It keeps each human's session, and whom each key and each name was last bound to, so a human's session is
+///   found again from anywhere: a Wedgie whose name was killed by its own key, and a human's next Wedgie by any
+///   name they had. None of it is secret: only the human's World ID can prove their session.
+///
 ///   Anyone may submit a binding: it says only what both yeses say. No owner, no upgrades.
 ///   v1 had no name in it; v2 asked World App for the same nullifier every time. Verifiers take v3 bindings only.
 contract KnockBinding {
@@ -84,6 +88,12 @@ contract KnockBinding {
     mapping(uint256 commitment => Session) public sessions;
     /// Each human's latest session, by their nullifier: how the Console finds a returning human's.
     mapping(uint256 nullifier => uint256 commitment) public sessionOf;
+    /// The human each device key was last bound to, by keyHash: a Wedgie whose name was killed is bound again as
+    /// them, found by its own key.
+    mapping(bytes32 keyHash => uint256 nullifier) public humanOfKey;
+    /// The human each name was last bound for, by node: a human's next Wedgie finds their session by a name they
+    /// had, killed or not.
+    mapping(bytes32 node => uint256 nullifier) public humanOfName;
 
     /// @notice The device whose key is (x, y), keyHash = keccak256(x || y), belongs to the human with this
     ///   nullifier, for the ENS name whose namehash is node, by a World ID proof whose credential lasts at least
@@ -167,7 +177,7 @@ contract KnockBinding {
             sessionOf[nullifier] = commitment;
             emit Human(nullifier, commitment, oprfSeed);
         }
-        emit Bound(nullifier, keccak256(abi.encodePacked(x, y)), node, expiresAtMin);
+        _bound(nullifier, x, y, node, expiresAtMin);
     }
 
     /// @notice Every binding after a human's first: another device, or one bound again after its name was killed,
@@ -204,7 +214,7 @@ contract KnockBinding {
             sessionNullifier,
             proof
         );
-        emit Bound(nullifier, keccak256(abi.encodePacked(x, y)), node, expiresAtMin);
+        _bound(nullifier, x, y, node, expiresAtMin);
     }
 
     /// The device's yes to this binding, for a name: its signature over bindDigest, s low.
@@ -220,6 +230,14 @@ contract KnockBinding {
         if (node == bytes32(0)) revert NoName();
         bytes32 digest = bindDigest(nullifier, expiresAtMin, x, y);
         if (uint256(s) > HALF_N || !_p256(digest, r, s, x, y)) revert NotSignedByDevice();
+    }
+
+    /// The record: the key and the name are this human's now, and Bound says so.
+    function _bound(uint256 nullifier, bytes32 x, bytes32 y, bytes32 node, uint64 expiresAtMin) internal {
+        bytes32 keyHash = keccak256(abi.encodePacked(x, y));
+        humanOfKey[keyHash] = nullifier;
+        humanOfName[node] = nullifier;
+        emit Bound(nullifier, keyHash, node, expiresAtMin);
     }
 
     /// IDKit's hash of the signal's bytes: the device's compressed key, then the name's node.

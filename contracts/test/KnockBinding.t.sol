@@ -196,6 +196,8 @@ contract KnockBindingTest is Vectors {
         assertEq(human, nullifier, "the session's human");
         assertEq(seed, SEED, "its seed");
         assertEq(kb.sessionOf(nullifier), SESSION, "found by the human");
+        assertEq(kb.humanOfKey(vm.parseJsonBytes32(json, ".key.keyHash")), nullifier, "the key's human");
+        assertEq(kb.humanOfName(node), nullifier, "the name's human");
     }
 
     /// The same Wedgie bound again by a session proof, after its name was killed: World ID is asked about that
@@ -223,6 +225,34 @@ contract KnockBindingTest is Vectors {
         vm.expectEmit(address(kb));
         emit Bound(nullifier, keccak256(abi.encodePacked(px, py)), nd, expiresAtMin);
         again(bytes32(px), bytes32(py), nd, r_, s_);
+        assertEq(kb.humanOfKey(keccak256(abi.encodePacked(px, py))), nullifier, "the new Wedgie's human");
+        assertEq(kb.humanOfName(nd), nullifier, "its name's");
+    }
+
+    /// The kill switch leaves World Chain as it was, so a killed Wedgie finds its human's session again by its own
+    /// key, from any browser, and a human's next Wedgie by a name they had; either binds again by that session.
+    function test_aHumansSessionIsFoundByTheirWedgieOrName() public {
+        first();
+        bytes32 keyHash = vm.parseJsonBytes32(json, ".key.keyHash");
+        uint256 c = kb.sessionOf(kb.humanOfKey(keyHash));
+        (uint256 human, uint256 seed) = kb.sessions(c);
+        assertEq(c, SESSION, "by the key");
+        assertEq(human, nullifier);
+        assertEq(seed, SEED);
+        assertEq(kb.sessionOf(kb.humanOfName(node)), SESSION, "by the name");
+        again(x, y, node, r, s);
+        assertEq(kb.humanOfKey(keyHash), nullifier, "still theirs");
+    }
+
+    /// A Wedgie someone else binds after its name was killed is theirs: a key's and a name's human is the latest.
+    function test_aWedgieBoundByAnotherHumanIsTheirs() public {
+        first();
+        uint256 other = nullifier ^ 1;
+        (bytes32 r_, bytes32 s_) = signed(kb, secret, other, expiresAtMin);
+        kb.bind(other, 7, expiresAtMin, 1, 0, proof, SESSION + 1, SEED, x, y, node, r_, s_);
+        assertEq(kb.humanOfKey(vm.parseJsonBytes32(json, ".key.keyHash")), other);
+        assertEq(kb.humanOfName(node), other);
+        assertEq(kb.sessionOf(nullifier), SESSION, "the first human keeps their session");
     }
 
     /// The device says yes for the session's human: its yes for anyone else's nullifier doesn't hold.
@@ -396,6 +426,8 @@ contract KnockBindingTest is Vectors {
         (uint256 human, uint256 got) = kb.sessions(c);
         assertEq(human, n);
         assertEq(got, oprfSeed);
+        assertEq(kb.humanOfKey(keccak256(abi.encodePacked(px, py))), n);
+        assertEq(kb.humanOfName(nd), n);
     }
 
     /// Any key, any name, bound again for the vectors' human by their session: World ID gets the session proof
@@ -428,6 +460,8 @@ contract KnockBindingTest is Vectors {
         vm.expectEmit(address(kb));
         emit Bound(nullifier, keccak256(abi.encodePacked(px, py)), nd, e);
         kb.bindAgain(SESSION, [sn, act], nonce, e, 1, 0, proof, bytes32(px), bytes32(py), nd, r_, s_);
+        assertEq(kb.humanOfKey(keccak256(abi.encodePacked(px, py))), nullifier);
+        assertEq(kb.humanOfName(nd), nullifier);
     }
 }
 
