@@ -1,6 +1,6 @@
 //! World ID RP signatures (docs.world.org/world-id/idkit/signatures): the RP's yes to one proof request.
 //! World ID checks it against the signer in its RP registry before a proof is made, so only knockd, which
-//! holds that key, can start a `knock-bind` request for Knock.
+//! holds that key, can start a binding request for Knock: a first binding's, or a session proof's.
 
 use alloy::primitives::{B256, keccak256};
 use alloy::signers::{SignerSync, local::PrivateKeySigner};
@@ -135,8 +135,8 @@ mod tests {
     }
 
     #[test]
-    fn knock_bind_is_the_contracts_action() {
-        // KnockBinding.ACTION and spec/vectors/v1.json's action hash
+    fn the_vectors_action_hashes_as_knockbinding_has_it() {
+        // KnockBinding.ACTION of a deployment proving the vectors' action, and spec/vectors/v1.json's action hash
         assert_eq!(
             hash_to_field(b"knock-bind").as_slice(),
             h("0078fe652308f1e1b32627be3473d9fd4affd1e01a0e418fb0be6dfb8093601f")

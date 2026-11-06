@@ -3,7 +3,7 @@ name = "knockd"
 version = "0.1.0"
 edition = "2024"
 publish = false
-description = "Knock's signer: World ID RP contexts for knock-bind, and bind() transactions on World Chain"
+description = "Knock's signer: World ID RP contexts for bindings, and bind() transactions on World Chain"
 
 [dependencies]
 alloy = { version = "2.5.0", features = ["full"] }

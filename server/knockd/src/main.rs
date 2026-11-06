@@ -1,6 +1,8 @@
-//! knockd: Knock's signer. It signs World ID RP contexts for the `knock-bind` action (`/rp-context`), and sends
-//! `KnockBinding.bind()` for a device that said yes on its own screen, the gas key paying (`/bind`). It also reads
-//! a binding back from its transaction (`/bound`), for the Console to name the device in ENS with.
+//! knockd: Knock's signer. It signs World ID RP contexts (`/rp-context`): for a human's first binding, a uniqueness
+//! proof for the deployment's action that starts a session, and for every binding after it, a session proof
+//! (D24). It sends `KnockBinding.bind()` or `bindAgain()` for a device that said yes on its own screen, the gas
+//! key paying (`/bind`). It also reads a binding back from its transaction (`/bound`), for the Console to name the
+//! device in ENS with, and finds a returning human's session (`/human`).
 //!
 //! Its secrets are read here and nowhere else (PLAN.md §5): the World RP key from its key file, and the gas key
 //! and World Chain RPC from `.env`, as are the app's World IDs. None of them is ever logged or sent back, and
@@ -31,8 +33,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 pub const CHAIN_ID: u64 = 480;
-/// The only action knockd signs requests for.
-const ACTIONS: &[&str] = &["knock-bind"];
+/// The KnockBinding knockd sends to: v3, whose first bindings start World ID sessions (D24).
+const VERSION: u64 = 3;
 /// How long a signed request lasts: World's default.
 const RP_TTL: u64 = 300;
 /// Our KnockBinding deployments and World's contracts they use (D18: public protocol contracts).
@@ -45,10 +47,12 @@ sol! {
     }
 }
 
-/// One World ID environment: its KnockBinding, and World's verifier and RP registry it answers to.
+/// One World ID environment: its KnockBinding and the action its first bindings prove, and World's verifier and
+/// RP registry it answers to.
 pub struct Env {
     pub name: &'static str,
     pub binding: Address,
+    pub action: String,
     pub verifier: Address,
     pub registry: Address,
 }
@@ -169,18 +173,20 @@ impl IntoResponse for Refusal {
 
 #[derive(Deserialize)]
 struct ContextRequest {
+    /// staging or production: a first binding proves that KnockBinding's action. Production when not given.
     #[serde(default)]
-    action: Option<String>,
+    environment: Option<String>,
+    /// For a binding by the human's session (bindAgain): its request names no action. Else a first binding.
+    #[serde(default)]
+    session: bool,
 }
 
 async fn rp_context(
     State(app): State<Arc<App>>,
     Json(q): Json<ContextRequest>,
 ) -> Result<Json<Value>, Refusal> {
-    let action = q.action.as_deref().unwrap_or("knock-bind");
-    if !ACTIONS.contains(&action) {
-        return Err(Refusal::bad(format!("action: one of {ACTIONS:?}")));
-    }
+    let env = app.env(q.environment.as_deref().unwrap_or("production"))?;
+    let action = (!q.session).then_some(env.action.as_str());
     app.contexts.take()?;
     let mut random = [0u8; 32];
     rand::rng().fill_bytes(&mut random);
@@ -188,14 +194,17 @@ async fn rp_context(
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let s = rp::sign(&app.rp_key, random, now, RP_TTL, Some(action)).map_err(|_| {
+    let s = rp::sign(&app.rp_key, random, now, RP_TTL, action).map_err(|_| {
         Refusal::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal",
             "couldn't sign",
         )
     })?;
-    tracing::info!("rp-context: signed a {action} request");
+    tracing::info!(
+        "rp-context: signed a {} request",
+        action.map_or_else(|| "session".to_string(), |a| format!("{a} (first binding)"))
+    );
     Ok(Json(json!({
         "app_id": app.app_id,
         "action": action,
@@ -214,6 +223,7 @@ async fn health(State(app): State<Arc<App>>) -> Json<Value> {
         "ok": true,
         "chainId": CHAIN_ID,
         "KnockBinding": {"staging": app.staging.binding, "production": app.production.binding},
+        "action": {"staging": app.staging.action, "production": app.production.action},
     }))
 }
 
@@ -235,9 +245,18 @@ fn envs() -> anyhow::Result<(Env, Env)> {
                 .parse()
                 .map_err(Into::into)
         };
+        ensure!(
+            d[name]["version"] == VERSION,
+            "deployments: {name} isn't KnockBinding v{VERSION}"
+        );
         Ok(Env {
             name,
             binding: a("KnockBinding")?,
+            action: d[name]["action"]
+                .as_str()
+                .filter(|s| !s.is_empty())
+                .with_context(|| format!("deployments: {name}.action"))?
+                .to_string(),
             verifier: a("WorldIDVerifier")?,
             registry: a("RpRegistry")?,
         })
@@ -254,8 +273,9 @@ fn rp_number(rp_id: &str) -> anyhow::Result<u64> {
     u64::from_str_radix(hex, 16).context("WORLD_RP_ID: rp_ and 16 hex digits")
 }
 
-/// Before serving: each KnockBinding carries our RP and its environment's verifier, and World's registry in each
-/// environment has our RP key as Knock's signer (else World ID would turn down every request we sign).
+/// Before serving: each KnockBinding is v3, proves the action the deployments say, and carries our RP and its
+/// environment's verifier, and World's registry in each environment has our RP key as Knock's signer (else World
+/// ID would turn down every request we sign).
 async fn check(app: &App) -> anyhow::Result<()> {
     ensure!(
         app.chain
@@ -267,15 +287,34 @@ async fn check(app: &App) -> anyhow::Result<()> {
     );
     for env in [&app.staging, &app.production] {
         let kb = bind::KnockBinding::new(env.binding, &app.chain);
-        let version = kb
-            .VERSION()
+        let version = kb.VERSION().call().await.map_err(|e| {
+            anyhow::anyhow!(
+                "{}: no KnockBinding v{VERSION} there ({})",
+                env.name,
+                app.redact(e)
+            )
+        })?;
+        ensure!(
+            version == alloy::primitives::U256::from(VERSION),
+            "{}: KnockBinding v{version}, not v{VERSION}",
+            env.name
+        );
+        let action = kb
+            .ACTION()
             .call()
             .await
-            .map_err(|e| anyhow::anyhow!("{}: no KnockBinding v2 there ({})", env.name, app.redact(e)))?;
+            .map_err(|e| anyhow::anyhow!(app.redact(e)))?;
         ensure!(
-            version == alloy::primitives::U256::from(2),
-            "{}: KnockBinding v{version}, not v2",
-            env.name
+            B256::from(action) == rp::hash_to_field(env.action.as_bytes())
+                && kb
+                    .action()
+                    .call()
+                    .await
+                    .map_err(|e| anyhow::anyhow!(app.redact(e)))?
+                    == env.action,
+            "{}: KnockBinding proves another action than the deployments' {}",
+            env.name,
+            env.action
         );
         let rp = kb
             .RP_ID()
@@ -369,7 +408,7 @@ async fn main() -> anyhow::Result<()> {
     if std::env::var("KNOCKD_SKIP_CHECKS").is_err() {
         check(&app).await?;
         tracing::info!(
-            "checked on World Chain: both KnockBindings carry our RP, and World knows our RP key"
+            "checked on World Chain: both KnockBindings are v3 with the deployments' actions and our RP, and World knows our RP key"
         );
     }
 
@@ -388,6 +427,7 @@ async fn main() -> anyhow::Result<()> {
         .route("/rp-context", post(rp_context))
         .route("/bind", post(bind::bind))
         .route("/bound", post(bind::bound))
+        .route("/human", post(bind::human))
         .layer(DefaultBodyLimit::max(16 * 1024))
         .layer(cors)
         .with_state(Arc::new(app));

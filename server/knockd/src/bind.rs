@@ -1,14 +1,20 @@
-//! POST /bind: one device bound to one human, for one ENS name (KnockBinding v2, D22), on World Chain. The Console
-//! brings IDKit's result for `knock-bind`, whose signal is the device's key and then the name's node, the node, and
-//! the device's `knock_bind_sig`. knockd checks the device's yes itself (its P-256 signature over KnockBind,
-//! s low), has World ID's verifier check the human's in a simulation, and only then sends `KnockBinding.bind()`,
-//! the gas key paying. A binding that would fail costs nothing.
+//! POST /bind: one device bound to one human, for one ENS name (KnockBinding v3, D22, D24), on World Chain. The
+//! Console brings IDKit's result, whose signal is the device's key and then the name's node, the node, and the
+//! device's `knock_bind_sig`. A human's first binding is a uniqueness proof for the deployment's action that
+//! started a World ID session (`bind()`); every one after it is a session proof (`bindAgain()`), for the human
+//! KnockBinding has for that session. knockd checks the device's yes itself (its P-256 signature over KnockBind,
+//! s low), has World ID's verifier check the human's in a simulation, and only then sends, the gas key paying. A
+//! binding that would fail costs nothing.
+//!
+//! POST /human: a human's session, as KnockBinding has it, for the Console to bind a returning human's Wedgie by.
 
-use crate::{App, CHAIN_ID, Refusal, rp::hash_to_field, word};
+use crate::{App, CHAIN_ID, Env, Refusal, rp::hash_to_field, word};
+use alloy::contract::SolCallBuilder;
 use alloy::primitives::{Address, B256, Bytes, U256, keccak256};
 use alloy::providers::Provider;
+use alloy::rpc::types::TransactionReceipt;
 use alloy::sol;
-use alloy::sol_types::{SolError, SolStruct, eip712_domain};
+use alloy::sol_types::{SolCall, SolError, SolStruct, eip712_domain};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -25,13 +31,23 @@ sol! {
         function VERSION() external view returns (uint256);
         function RP_ID() external view returns (uint64);
         function WORLD_ID() external view returns (address);
+        function ACTION() external view returns (uint256);
+        function action() external view returns (string);
+        function sessions(uint256 commitment) external view returns (uint256 nullifier, uint256 oprfSeed);
+        function sessionOf(uint256 nullifier) external view returns (uint256);
         function bindDigest(uint256 nullifier, uint64 expiresAtMin, bytes32 x, bytes32 y) external view returns (bytes32);
         function bind(uint256 nullifier, uint256 nonce, uint64 expiresAtMin, uint64 issuerSchemaId,
-            uint256 genesisIssuedAtMin, uint256[5] calldata proof, bytes32 x, bytes32 y, bytes32 node, bytes32 r,
-            bytes32 s) external;
+            uint256 genesisIssuedAtMin, uint256[5] calldata proof, uint256 commitment, uint256 oprfSeed, bytes32 x,
+            bytes32 y, bytes32 node, bytes32 r, bytes32 s) external;
+        function bindAgain(uint256 commitment, uint256[2] calldata sessionNullifier, uint256 nonce,
+            uint64 expiresAtMin, uint64 issuerSchemaId, uint256 genesisIssuedAtMin, uint256[5] calldata proof,
+            bytes32 x, bytes32 y, bytes32 node, bytes32 r, bytes32 s) external;
         event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, bytes32 indexed node, uint64 expiresAtMin);
+        event Human(uint256 indexed nullifier, uint256 indexed commitment, uint256 oprfSeed);
         error NotSignedByDevice();
         error NoName();
+        error NoSession();
+        error NotASession();
     }
 
     /// What the device signs to bind (Knock's EIP-712, domain {name: "Knock", version: "1"}).
@@ -43,6 +59,7 @@ sol! {
     error ExpirationTooOld();
     error ProofInvalid();
     error PublicInputNotInField();
+    error InvalidAction();
 }
 
 /// P-256's n / 2: a larger s is the other form of the same signature, which KnockBinding turns down.
@@ -53,6 +70,20 @@ const HALF_N: U256 = U256::from_be_bytes(alloy::primitives::hex!(
 /// The binding's World ID signal hash: hash_to_field of the device's compressed key, then the name's node.
 pub fn bind_signal_hash(key: &[u8], node: B256) -> B256 {
     hash_to_field(&[key, node.as_slice()].concat())
+}
+
+/// World ID's session id: `session_`, then the session's commitment and oprf seed (32 bytes each), in hex.
+pub fn parse_session(s: &str) -> Option<(U256, U256)> {
+    let b = alloy::primitives::hex::decode(s.strip_prefix("session_")?).ok()?;
+    (b.len() == 64).then(|| (U256::from_be_slice(&b[..32]), U256::from_be_slice(&b[32..])))
+}
+
+pub fn session_id(commitment: U256, oprf_seed: U256) -> String {
+    format!(
+        "session_{}{}",
+        alloy::primitives::hex::encode(commitment.to_be_bytes::<32>()),
+        alloy::primitives::hex::encode(oprf_seed.to_be_bytes::<32>())
+    )
 }
 
 /// KnockBinding.bindDigest, worked out here: what the device signed for this binding.
@@ -113,13 +144,20 @@ impl<'de> Deserialize<'de> for Num {
     }
 }
 
-/// IDKit's result for `knock-bind` (one response), and the device's `knock_bind_sig`.
+/// IDKit's result (one response), and the device's `knock_bind_sig`.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BindRequest {
     /// The result's environment: staging (Simulator proofs) or production (World App).
     environment: String,
+    /// The human: a first binding's proof's nullifier; for a session proof, the session's human, whom the
+    /// device said yes for.
     nullifier: Num,
+    /// The result's session id: the session a first binding started, or the one a session proof proved.
+    session: String,
+    /// A session proof's session nullifier and the random action it was made for: a binding by session.
+    #[serde(default)]
+    session_nullifier: Option<[Num; 2]>,
     /// The request's nonce: the RP context's, which the result repeats.
     nonce: Num,
     expires_at_min: Num,
@@ -167,6 +205,9 @@ fn refusal_name(data: &[u8]) -> Option<&'static str> {
             "NotSignedByDevice",
         ),
         (KnockBinding::NoName::SELECTOR, "NoName"),
+        (KnockBinding::NoSession::SELECTOR, "NoSession"),
+        (KnockBinding::NotASession::SELECTOR, "NotASession"),
+        (InvalidAction::SELECTOR, "InvalidAction"),
     ]
     .into_iter()
     .find(|(s, _)| *s == sel)
@@ -197,17 +238,79 @@ fn chain_trouble(app: &App, what: &str, e: impl std::fmt::Display) -> Refusal {
     )
 }
 
+/// Simulate, then send: a binding World Chain would turn down is refused here, and costs nothing.
+async fn simulate_then_send<P: Provider, C: SolCall>(
+    app: &App,
+    env: &Env,
+    call: SolCallBuilder<P, C>,
+) -> Result<TransactionReceipt, Refusal> {
+    let call = call.from(app.gas);
+    if let Err(e) = call.call().await {
+        return Err(match e.as_revert_data() {
+            Some(data) => {
+                let name =
+                    refusal_name(&data).map_or_else(|| format!("revert {data}"), str::to_string);
+                tracing::info!("bind: {} refuses ({name}); nothing sent", env.name);
+                let step = next_step(&name).map_or_else(String::new, |s| format!(". {s}"));
+                Refusal::new(
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "refused",
+                    format!("{} says no: {name}{step}", env.name),
+                )
+            }
+            None => chain_trouble(app, "the simulation", e),
+        });
+    }
+    app.sends.take()?;
+    let pending = call
+        .send()
+        .await
+        .map_err(|e| chain_trouble(app, "sending", e))?;
+    let receipt = pending
+        .with_timeout(Some(Duration::from_secs(90)))
+        .get_receipt()
+        .await
+        .map_err(|e| chain_trouble(app, "waiting for the receipt", e))?;
+    if !receipt.status() {
+        tracing::warn!(
+            "bind: {} tx {} reverted",
+            env.name,
+            receipt.transaction_hash
+        );
+        return Err(Refusal::new(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "reverted",
+            format!("tx {} reverted", receipt.transaction_hash),
+        ));
+    }
+    Ok(receipt)
+}
+
+fn no_session(env: &Env) -> Refusal {
+    Refusal::new(
+        StatusCode::NOT_FOUND,
+        "no_session",
+        format!(
+            "{}'s KnockBinding has no session for this human: their first Wedgie binds with a World ID \
+             uniqueness proof, which starts one",
+            env.name
+        ),
+    )
+}
+
 pub async fn bind(
     State(app): State<Arc<App>>,
     Json(q): Json<BindRequest>,
 ) -> Result<Json<Value>, Refusal> {
     let env = app.env(&q.environment)?;
-    let nullifier = q.nullifier.0;
     let nonce = q.nonce.0;
     let expires = u64_of(&q.expires_at_min, "expiresAtMin")?;
     let issuer = u64_of(&q.issuer_schema_id, "issuerSchemaId")?;
     let genesis = q.genesis_issued_at_min.as_ref().map_or(U256::ZERO, |n| n.0);
     let proof = q.proof.each_ref().map(|n| n.0);
+    let (commitment, seed) = parse_session(&q.session).ok_or_else(|| {
+        Refusal::bad("session: session_ and 128 hex digits, World ID's session id")
+    })?;
     let key = bytes_of(&q.key, 33, "key")?;
     let (vk, x, y) = device_key(&key).ok_or_else(|| Refusal::bad("key: a compressed P-256 key"))?;
     let r = B256::from_slice(&bytes_of(&q.r, 32, "r")?);
@@ -223,6 +326,31 @@ pub async fn bind(
             "signalHash: the proof's signal isn't this device's key and this name",
         ));
     }
+    let kb = KnockBinding::new(env.binding, &app.chain);
+    // Whose binding it is: a first binding's proof says; a session proof's human is the session's, on World Chain
+    let first = q.session_nullifier.is_none();
+    if first {
+        if commitment.is_zero() || seed >> 248 != U256::from(1) {
+            return Err(Refusal::bad(
+                "session: a World ID session (a commitment, and an oprf seed starting 0x01)",
+            ));
+        }
+    } else {
+        app.lookups.take()?;
+        let human = kb
+            .sessions(commitment)
+            .call()
+            .await
+            .map_err(|e| chain_trouble(&app, "reading the session", e))?
+            .nullifier;
+        if human.is_zero() {
+            return Err(no_session(env));
+        }
+        if human != q.nullifier.0 {
+            return Err(Refusal::bad("nullifier: the session is another human's"));
+        }
+    }
+    let nullifier = q.nullifier.0;
     if !signed_by(
         &vk,
         bind_digest(env.binding, nullifier, expires, &key),
@@ -241,47 +369,33 @@ pub async fn bind(
 
     app.simulations.take()?;
     let _one = app.sending.lock().await;
-    let kb = KnockBinding::new(env.binding, &app.chain);
-    let call = kb
-        .bind(
-            nullifier, nonce, expires, issuer, genesis, proof, x, y, node, r, s,
-        )
-        .from(app.gas);
-    if let Err(e) = call.call().await {
-        return Err(match e.as_revert_data() {
-            Some(data) => {
-                let name =
-                    refusal_name(&data).map_or_else(|| format!("revert {data}"), str::to_string);
-                tracing::info!("bind: {} refuses ({name}); nothing sent", env.name);
-                let step = next_step(&name).map_or_else(String::new, |s| format!(". {s}"));
-                Refusal::new(
-                    StatusCode::UNPROCESSABLE_ENTITY,
-                    "refused",
-                    format!("{} says no: {name}{step}", env.name),
-                )
-            }
-            None => chain_trouble(&app, "the simulation", e),
-        });
-    }
-    app.sends.take()?;
-    let pending = call
-        .send()
-        .await
-        .map_err(|e| chain_trouble(&app, "sending", e))?;
-    let receipt = pending
-        .with_timeout(Some(Duration::from_secs(90)))
-        .get_receipt()
-        .await
-        .map_err(|e| chain_trouble(&app, "waiting for the receipt", e))?;
+    let receipt = match &q.session_nullifier {
+        None => {
+            let call = kb.bind(
+                nullifier, nonce, expires, issuer, genesis, proof, commitment, seed, x, y, node, r,
+                s,
+            );
+            simulate_then_send(&app, env, call).await?
+        }
+        Some(sn) => {
+            let call = kb.bindAgain(
+                commitment,
+                [sn[0].0, sn[1].0],
+                nonce,
+                expires,
+                issuer,
+                genesis,
+                proof,
+                x,
+                y,
+                node,
+                r,
+                s,
+            );
+            simulate_then_send(&app, env, call).await?
+        }
+    };
     let tx = receipt.transaction_hash;
-    if !receipt.status() {
-        tracing::warn!("bind: {} tx {tx} reverted", env.name);
-        return Err(Refusal::new(
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "reverted",
-            format!("tx {tx} reverted"),
-        ));
-    }
     let bound = receipt
         .inner
         .logs()
@@ -292,8 +406,9 @@ pub async fn bind(
         .inner
         .data;
     tracing::info!(
-        "bind: {} bound, tx {tx}, gas {}",
+        "bind: {} bound ({}), tx {tx}, gas {}",
         env.name,
+        if first { "first" } else { "by session" },
         receipt.gas_used
     );
     Ok(Json(json!({
@@ -304,6 +419,8 @@ pub async fn bind(
         "block": receipt.block_number,
         "gasUsed": receipt.gas_used,
         "poh": format!("eip155:{CHAIN_ID}:tx:{tx}"),
+        "first": first,
+        "session": session_id(commitment, seed),
         "bound": {
             "nullifier": word(bound.nullifier),
             "keyHash": bound.keyHash,
@@ -311,6 +428,60 @@ pub async fn bind(
             "expiresAtMin": bound.expiresAtMin,
         },
         "keyHash": keccak256([x.as_slice(), y.as_slice()].concat()),
+    })))
+}
+
+#[derive(Deserialize)]
+pub struct HumanRequest {
+    environment: String,
+    #[serde(default)]
+    nullifier: Option<Num>,
+    #[serde(default)]
+    session: Option<String>,
+}
+
+/// POST /human: a human's World ID session with Knock, as KnockBinding has it: by their nullifier (their latest
+/// session), or by a session id (whose it is). Not secret: only the human's World ID can prove a session.
+pub async fn human(
+    State(app): State<Arc<App>>,
+    Json(q): Json<HumanRequest>,
+) -> Result<Json<Value>, Refusal> {
+    let env = app.env(&q.environment)?;
+    let commitment = match (&q.nullifier, &q.session) {
+        (Some(_), None) => None,
+        (None, Some(s)) => Some(
+            parse_session(s)
+                .ok_or_else(|| Refusal::bad("session: session_ and 128 hex digits"))?
+                .0,
+        ),
+        _ => return Err(Refusal::bad("a nullifier or a session, one of them")),
+    };
+    app.lookups.take()?;
+    let kb = KnockBinding::new(env.binding, &app.chain);
+    let commitment = match (commitment, &q.nullifier) {
+        (Some(c), _) => c,
+        (None, Some(n)) => kb
+            .sessionOf(n.0)
+            .call()
+            .await
+            .map_err(|e| chain_trouble(&app, "reading the human's session", e))?,
+        (None, None) => unreachable!(),
+    };
+    if commitment.is_zero() {
+        return Err(no_session(env));
+    }
+    let s = kb
+        .sessions(commitment)
+        .call()
+        .await
+        .map_err(|e| chain_trouble(&app, "reading the session", e))?;
+    if s.nullifier.is_zero() {
+        return Err(no_session(env));
+    }
+    Ok(Json(json!({
+        "environment": env.name,
+        "nullifier": word(s.nullifier),
+        "session": session_id(commitment, s.oprfSeed),
     })))
 }
 
@@ -504,6 +675,19 @@ mod tests {
     }
 
     #[test]
+    fn session_ids_as_world_id_writes_them() {
+        let c = U256::from(0x5e5510u64);
+        let seed = (U256::from(1) << 248) | U256::from(0x5eedu64);
+        let id = session_id(c, seed);
+        assert_eq!(id.len(), "session_".len() + 128);
+        assert!(id.starts_with("session_0000"));
+        assert_eq!(parse_session(&id), Some((c, seed)));
+        assert_eq!(parse_session(&id[1..]), None, "no prefix");
+        assert_eq!(parse_session(&id[..id.len() - 2]), None, "63 bytes");
+        assert_eq!(parse_session("session_zz"), None);
+    }
+
+    #[test]
     fn world_ids_refusals_by_name() {
         assert_eq!(
             refusal_name(&InvalidMerkleRoot::SELECTOR),
@@ -512,6 +696,14 @@ mod tests {
         assert_eq!(
             refusal_name(&KnockBinding::NotSignedByDevice::SELECTOR),
             Some("NotSignedByDevice")
+        );
+        assert_eq!(
+            refusal_name(&KnockBinding::NotASession::SELECTOR),
+            Some("NotASession")
+        );
+        assert_eq!(
+            refusal_name(&InvalidAction::SELECTOR),
+            Some("InvalidAction")
         );
         assert_eq!(refusal_name(&[0, 0, 0, 0]), None);
         assert!(
