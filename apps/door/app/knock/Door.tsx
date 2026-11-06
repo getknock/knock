@@ -17,6 +17,7 @@ export function Door() {
   const [words, setWords] = useState<string | null>(null)
   const wedgie = useRef<Wedgie | null>(null)
   const answered = useRef(false)
+  const requested = useRef(false)
 
   // One answer, to the site's origin only (a refusal for an origin we can't name goes nowhere)
   const answer = useCallback((origin: string, m: Record<string, unknown>) => {
@@ -83,11 +84,10 @@ export function Door() {
         setWords(r.refusal.message)
         return
       }
-      setRequest((had) => {
-        if (had) return had // one request per Door
-        knock(r.request)
-        return r.request
-      })
+      if (requested.current) return // one request per Door
+      requested.current = true
+      setRequest(r.request)
+      knock(r.request)
     }
     window.addEventListener('message', onMessage)
     window.opener.postMessage({ type: 'knock/ready' }, '*') // says nothing but that the Door is up
