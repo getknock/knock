@@ -2,13 +2,16 @@
 import { useEffect, useState } from 'react'
 import { forget } from '../../lib/bindings'
 import { type Device, meet } from '../../lib/device'
+import { described } from '../../lib/ens'
 import { type Sent, killName } from '../../lib/name'
 import { type Connected, ETHERSCAN } from '../../lib/wallet'
 import type { Wedgie } from '../../lib/wedgie'
 import { WalletBox } from './WalletBox'
 
 type Phase = 'idle' | 'running' | 'done' | 'stopped'
-const RAIL = ['Unregister the name: it stops resolving', 'Unlink its records', 'Read it back through ENS', 'The Wedgie forgets its name and binding']
+const WALLET_STEPS = ['Unregister the name: it stops resolving', 'Unlink its records']
+const ONE_TX = ['Unregister the name and unlink its records: one transaction']
+const AFTER = ['Read it back through ENS', 'The Wedgie forgets its name and binding']
 
 /** The kill switch (D20): the name and the binding it points at, gone for every site, from your wallet. */
 export function KillSwitch(props: {
@@ -26,15 +29,20 @@ export function KillSwitch(props: {
   const [phase, setPhase] = useState<Phase>('idle')
   const [at, setAt] = useState(-1)
   const [sent, setSent] = useState<Sent[]>([])
-  const [forgotten, setForgotten] = useState(false)
+  const [told, setTold] = useState<'forgot' | 'revoked' | 'away'>('away')
+  const [oneTx, setOneTx] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
     if (device?.name) setName(device.name)
   }, [device?.name])
 
+  // One transaction when the wallet can batch (D25); it goes back to steps if the wallet won't after all
+  useEffect(() => setOneTx(Boolean(wallet?.batch)), [wallet])
+
   // Only the Wedgie that carries the name forgets: killing a lost one's name leaves the connected one as it is
   const own = wedgie && device?.name === name ? wedgie : null
+  const rail = [...(oneTx ? ONE_TX : WALLET_STEPS), ...AFTER]
 
   async function kill() {
     if (!wallet) return
@@ -42,15 +50,25 @@ export function KillSwitch(props: {
     setSent([])
     setPhase('running')
     props.onBusy(true)
+    let walletSteps = oneTx ? 1 : 2
     try {
       const out = await killName(own, wallet, name, (s) => {
-        if (s.step === 'tx') setAt(s.tx.id === 'unregister' ? 0 : 1)
-        if (s.step === 'check') setAt(2)
-        if (s.step === 'device') setAt(3)
+        if (s.step === 'batch') {
+          setOneTx(true)
+          walletSteps = 1
+          setAt(0)
+        }
+        if (s.step === 'tx') {
+          setOneTx(false)
+          walletSteps = 2
+          setAt(s.tx.id === 'unregister' ? 0 : 1)
+        }
+        if (s.step === 'check') setAt(walletSteps)
+        if (s.step === 'device') setAt(walletSteps + 1)
       })
       setSent(out.sent)
-      setForgotten(out.forgotten)
-      if (own && device && out.forgotten) {
+      setTold(out.wedgie)
+      if (own && device && out.wedgie !== 'away') {
         forget(device.key, 'production')
         props.onDevice(await meet(own))
       }
@@ -64,8 +82,9 @@ export function KillSwitch(props: {
   }
 
   const running = phase === 'running'
+  const last = rail.length - 1
   const stepClass = (i: number) =>
-    phase === 'done' ? (i === 3 && !forgotten ? '' : 'done') : i < at ? 'done' : i === at ? (phase === 'stopped' ? 'failed' : 'now') : ''
+    phase === 'done' ? (i === last && told !== 'forgot' ? '' : 'done') : i < at ? 'done' : i === at ? (phase === 'stopped' ? 'failed' : 'now') : ''
   return (
     <section aria-labelledby="kill-title" className="part danger">
       <h2 id="kill-title">Kill switch</h2>
@@ -95,12 +114,12 @@ export function KillSwitch(props: {
       </label>
 
       <ol className="steps">
-        {RAIL.map((what, i) => (
+        {rail.map((what, i) => (
           <li key={what} className={stepClass(i)}>
             <div>
               <strong>{what}</strong>
-              {i === 3 && !wedgie ? <p>No Wedgie connected: it keeps showing the name until you connect it and kill again.</p> : null}
-              {i === 3 && wedgie && !own && name ? (
+              {i === last && !wedgie ? <p>No Wedgie connected: it keeps showing the name until you connect it and kill again.</p> : null}
+              {i === last && wedgie && !own && name ? (
                 <p>The connected Wedgie isn't {name}, so it stays as it is.</p>
               ) : null}
             </div>
@@ -125,13 +144,16 @@ export function KillSwitch(props: {
           <h3>{name} is gone</h3>
           <p>
             ENS no longer resolves it, so no site takes this Wedgie's knocks.
-            {forgotten ? ' The Wedgie forgot its name and binding.' : ''}
+            {told === 'forgot' ? ' The Wedgie forgot its name and binding.' : ''}
+            {told === 'revoked'
+              ? " This Wedgie runs Knock 4, which can only mark its name revoked, so its home screen keeps showing it. Install Knock 5 or later on it, then kill again: it forgets."
+              : ''}
           </p>
           <ul className="sent">
             {sent.map((s) => (
               <li key={s.hash}>
                 <a href={`${ETHERSCAN}/tx/${s.hash}`} target="_blank" rel="noreferrer">
-                  {s.tx.what}
+                  {described(s.txs)}
                 </a>
                 , {s.gasUsed.toLocaleString()} gas
               </li>

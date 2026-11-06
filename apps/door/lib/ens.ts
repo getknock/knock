@@ -363,6 +363,23 @@ export async function readName(c: PublicClient, wallet: Address, label: string, 
 /** One transaction for the user's wallet: what it does, in words, and the call. */
 export type Tx = { id: 'records' | 'registry' | 'link' | 'name' | 'unregister' | 'unlink'; what: string; to: Address; data: Hex }
 
+/** Each call in a few words, for a batch's one line. */
+export const BRIEF: Record<Tx['id'], string> = {
+  records: "Knock's records",
+  registry: 'a registry for the parent',
+  link: 'its link',
+  name: 'the name',
+  unregister: 'unregister the name',
+  unlink: 'unlink its records',
+}
+
+/** A transaction's calls, in words: one call's own, or a batch's few words each. */
+export function described(txs: Tx[]): string {
+  if (txs.length === 1) return txs[0].what
+  const words = txs.map((t) => BRIEF[t.id])
+  return `One transaction: ${words.slice(0, -1).join(', ')} and ${words.at(-1)}`
+}
+
 /** The transactions that name the Wedgie, in order: records, registry, link, name. Done steps aren't here. */
 export function namingTxs(s: NameState, r: Records): Tx[] {
   if (s.held === 'taken') throw new NotYours(`${s.name} is someone else's.`)

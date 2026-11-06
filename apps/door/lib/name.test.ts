@@ -1,6 +1,7 @@
 // Naming and the kill switch with stand-ins: a pretend Wedgie signs BECOME with the vectors' test key, fetch plays
-// knockd, the wallet's send is recorded, and ENS answers what it's told. The order of everything is checked, and
-// that nothing is sent or told after a no. The real transactions are checked on a mainnet fork (scripts/ens-fork.ts).
+// knockd, the wallet's sends (one call each, or a batch as one transaction) are recorded, and ENS answers what it's
+// told. The order of everything is checked, and that nothing is sent or told after a no. The real transactions are
+// checked on a mainnet fork (scripts/ens-fork.ts).
 import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test'
 import { deviceNode, digest, keyHash, signDigest, uncompressKey } from '@knock-dev/protocol'
 import { type Address, type Hex, zeroAddress } from 'viem'
@@ -38,12 +39,23 @@ const state = (over: Partial<ens.NameState> = {}): ens.NameState => ({
 let now = state()
 let log: string[] = []
 let refuse: string | null = null
+let batches = true // the wallet batches when asked; false: it says it can't after all (EIP-5792's 5700 and kin)
 mock.module('./ens', () => ({ ...ens, readName: async () => now }))
 mock.module('./wallet', () => ({
   send: async (_c: unknown, tx: ens.Tx) => {
     if (refuse === tx.id) throw new Error(`ENS would refuse ${tx.id}`)
     log.push(`send ${tx.id}`)
     return { hash: TX, gasUsed: 1n }
+  },
+  sendBatch: async (_c: unknown, txs: ens.Tx[]) => {
+    if (!batches) {
+      log.push('no batch')
+      return null
+    }
+    const no = txs.find((tx) => tx.id === refuse)
+    if (no) throw new Error(`ENS would refuse ${no.id}`)
+    log.push(`batch ${txs.map((tx) => tx.id).join(' ')}`)
+    return { hash: TX, gasUsed: 2n, atomic: true }
   },
 }))
 
@@ -95,11 +107,12 @@ afterEach(() => {
   globalThis.fetch = realFetch
   log = []
   refuse = null
+  batches = true
   now = state()
 })
 
-/** The wallet's view of ENS: what's been written so far, or what `shows` says. */
-function wallet(shows: 'records' | 'nothing' = 'records') {
+/** The wallet's view of ENS: what's been written so far, or what `shows` says. `batch`: it says it batches calls. */
+function wallet(shows: 'records' | 'nothing' = 'records', batch = false) {
   const texts = Object.fromEntries(
     ens.recordTexts({ wallet: WALLET, key: KEY, nullifier: NULLIFIER, poh: `eip155:480:tx:${TX}`, sc: 'S1' }),
   )
@@ -109,11 +122,14 @@ function wallet(shows: 'records' | 'nothing' = 'records') {
     chain: {
       getEnsAddress: async () => {
         log.push('ens addr')
-        return shows === 'records' && log.includes('send name') ? WALLET : null
+        return shows === 'records' && log.some((l) => l === 'send name' || (l.startsWith('batch') && l.endsWith(' name')))
+          ? WALLET
+          : null
       },
       getEnsText: async ({ key }: { key: string }) => (shows === 'records' ? texts[key] : null),
     },
     wallet: {},
+    batch,
   } as never
 }
 
@@ -178,6 +194,32 @@ describe('nameWedgie', () => {
     )
     expect(log.some((l) => l.startsWith('wedgie knock_confirm'))).toBe(false)
   })
+
+  test('a wallet that batches: BECOME, then every call as one transaction, ENS read back, the Wedgie told', async () => {
+    knockd()
+    const steps: string[] = []
+    const out = await nameWedgie(wedgie(), wallet('records', true), device, 'wedgie', 'itzraj.eth', TX, (s) => steps.push(s.step))
+    expect(log).toEqual(['knockd /bound', 'wedgie knock_enroll', 'batch records registry link name', 'ens addr', 'wedgie knock_confirm active'])
+    expect(steps).toEqual(['binding', 'plan', 'device', 'batch', 'check', 'confirm'])
+    expect(out.sent).toHaveLength(1)
+    expect(out.sent[0].txs.map((tx) => tx.id)).toEqual(['records', 'registry', 'link', 'name'])
+    expect(ens.described(out.sent[0].txs)).toBe("One transaction: Knock's records, a registry for the parent, its link and the name")
+  })
+
+  test("a wallet that says it batches but won't after all: one at a time; ENS refusing a call in a batch: nothing sent", async () => {
+    knockd()
+    batches = false
+    const out = await nameWedgie(wedgie(), wallet('records', true), device, 'wedgie', 'itzraj.eth', TX, () => {})
+    expect(log.slice(2, 7)).toEqual(['no batch', 'send records', 'send registry', 'send link', 'send name'])
+    expect(out.sent.map((s) => s.txs.length)).toEqual([1, 1, 1, 1])
+    log = []
+    batches = true
+    refuse = 'link'
+    await expect(
+      nameWedgie(wedgie(), wallet('records', true), device, 'wedgie', 'itzraj.eth', TX, () => {}),
+    ).rejects.toThrow('refuse link')
+    expect(log).toEqual(['knockd /bound', 'wedgie knock_enroll'])
+  })
 })
 
 describe('killName', () => {
@@ -187,16 +229,30 @@ describe('killName', () => {
     now = named()
     const out = await killName(wedgie(), wallet('nothing'), 'wedgie.itzraj.eth', () => {})
     expect(log).toEqual(['send unregister', 'send unlink', 'ens addr', 'wedgie knock_forget'])
-    expect(out.forgotten).toBe(true)
+    expect(out.wedgie).toBe('forgot')
+  })
+
+  test('a wallet that batches: both calls as one transaction; one call left: sent as it is', async () => {
+    now = named()
+    const out = await killName(wedgie(), wallet('nothing', true), 'wedgie.itzraj.eth', () => {})
+    expect(log).toEqual(['batch unregister unlink', 'ens addr', 'wedgie knock_forget'])
+    expect(out.sent).toHaveLength(1)
+    expect(ens.described(out.sent[0].txs)).toBe('One transaction: unregister the name and unlink its records')
+    expect(out.wedgie).toBe('forgot')
+    log = []
+    now = state({ recordId: 3n }) // unregistered already, its records still linked
+    await killName(null, wallet('nothing', true), 'wedgie.itzraj.eth', () => {})
+    expect(log).toEqual(['send unlink', 'ens addr'])
   })
 
   test('a lost Wedgie: ENS alone; Knock 4 keeps its name, revoked, with no binding', async () => {
     now = named()
-    expect((await killName(null, wallet('nothing'), 'wedgie.itzraj.eth', () => {})).forgotten).toBe(false)
+    expect((await killName(null, wallet('nothing'), 'wedgie.itzraj.eth', () => {})).wedgie).toBe('away')
     expect(log).toEqual(['send unregister', 'send unlink', 'ens addr'])
     log = []
     now = state({ recordId: 0n }) // already killed
-    await killName(wedgie('green', false), wallet('nothing'), 'wedgie.itzraj.eth', () => {})
+    const old = await killName(wedgie('green', false), wallet('nothing'), 'wedgie.itzraj.eth', () => {})
     expect(log).toEqual(['ens addr', 'wedgie knock_forget', 'wedgie knock_confirm revoked'])
+    expect(old.wedgie).toBe('revoked')
   })
 })

@@ -4,7 +4,7 @@ import type { Hex } from 'viem'
 import { recall, remember } from '../../lib/bindings'
 import { EXPLORER } from '../../lib/deployments'
 import { type Device, meet } from '../../lib/device'
-import { type Tx, nameProblem, namingTxs, readName } from '../../lib/ens'
+import { type Tx, described, nameProblem, namingTxs, readName } from '../../lib/ens'
 import { type Sent, nameWedgie } from '../../lib/name'
 import { type Connected, ETHERSCAN } from '../../lib/wallet'
 import type { Wedgie } from '../../lib/wedgie'
@@ -45,6 +45,7 @@ export function Naming(props: {
   const [phase, setPhase] = useState<Phase>('idle')
   const [at, setAt] = useState(-1)
   const [sent, setSent] = useState<Sent[]>([])
+  const [oneTx, setOneTx] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
 
   useEffect(() => {
@@ -64,10 +65,14 @@ export function Naming(props: {
     wedgie && device && wallet && binding && !otherName && label && parent && !nameIssue && !props.locked,
   )
   // The rail: the binding, BECOME, the wallet's transactions, ENS read back, the Wedgie told
+  const walletRail =
+    plan && oneTx && plan.length > 1
+      ? [described(plan)]
+      : (plan ?? [{ what: 'Your wallet: the records, then the name' } as Tx]).map((t) => t.what)
   const rail = [
     'Read the binding back from World Chain',
     'BECOME on the Wedgie: press green',
-    ...(plan ?? [{ what: 'Your wallet: the records, then the name' } as Tx]).map((t) => t.what),
+    ...walletRail,
     'Read the name back through ENS',
     'Tell the Wedgie: its Human badge',
   ]
@@ -81,6 +86,7 @@ export function Naming(props: {
       // The plan as it stands, with stand-in records: what each transaction is doesn't depend on them
       const s = await readName(wallet.chain, wallet.account, label, parent)
       setPlan(namingTxs(s, { wallet: wallet.account, key: device.key, nullifier: '0x', poh: '', sc: device.sc }))
+      setOneTx(wallet.batch) // one transaction when the wallet can batch (D25)
       setPhase('checked')
       setAt(-1)
     } catch (e) {
@@ -96,23 +102,33 @@ export function Naming(props: {
     setPhase('running')
     props.onBusy(true)
     let n = plan.length
+    let walletSteps = oneTx && n > 1 ? 1 : n
     try {
       const out = await nameWedgie(wedgie, wallet, device, label, parent, binding.tx, (s) => {
         if (s.step === 'binding') setAt(0)
         if (s.step === 'plan') {
           n = s.txs.length
+          walletSteps = oneTx && n > 1 ? 1 : n
           setPlan(s.txs)
         }
         if (s.step === 'device') {
           setAt(1)
           props.onView({ kind: 'become', name })
         }
+        if (s.step === 'batch') {
+          props.onView(null)
+          setOneTx(true)
+          walletSteps = 1
+          setAt(2)
+        }
         if (s.step === 'tx') {
           props.onView(null)
+          setOneTx(false) // the wallet won't batch after all: one at a time
+          walletSteps = s.n
           setAt(2 + s.i)
         }
-        if (s.step === 'check') setAt(2 + n)
-        if (s.step === 'confirm') setAt(3 + n)
+        if (s.step === 'check') setAt(2 + walletSteps)
+        if (s.step === 'confirm') setAt(3 + walletSteps)
       })
       setSent(out.sent)
       remember(device.key, 'production', { tx: binding.tx, name }) // a pasted one too, now that it's checked
@@ -234,7 +250,7 @@ export function Naming(props: {
             {sent.map((s) => (
               <li key={s.hash}>
                 <a href={`${ETHERSCAN}/tx/${s.hash}`} target="_blank" rel="noreferrer">
-                  {s.tx.what}
+                  {described(s.txs)}
                 </a>
                 , {s.gasUsed.toLocaleString()} gas
               </li>

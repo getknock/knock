@@ -1,7 +1,8 @@
 /**
  * Naming a Wedgie and the kill switch, on a fork of mainnet: the Console's own transactions (lib/ens.ts), sent as
- * the parent's owner, then read back through ENS's Universal Resolver as any verifier would. Nothing reaches
- * mainnet. The owner is read from the registry and never printed.
+ * the parent's owner, then read back through ENS's Universal Resolver as any verifier would. Each set of calls is
+ * first run together in one block (eth_simulateV1), as a wallet that batches sends them as one transaction (D25).
+ * Nothing reaches mainnet. The owner is read from the registry and never printed.
  *
  *   anvil --fork-url <mainnet RPC> --port 8545      then, from apps/door:
  *   bun run scripts/ens-fork.ts [label] [parent]    (default: a test label under itzraj.eth)
@@ -85,6 +86,17 @@ async function send(txs: { id: string; to: Address; data: Hex }[]) {
   }
 }
 
+// The calls in order, from the owner, in one block: as an atomic batch runs them (D25), and as the Console checks them
+async function together(what: string, txs: { id: string; to: Address; data: Hex }[]) {
+  try {
+    const { results } = await c.simulateCalls({ account: owner, calls: txs.map(({ to, data }) => ({ to, data })) })
+    const i = results.findIndex((r) => r.status !== 'success')
+    check(`${what} as one batch: ${txs.map((t) => t.id).join(', ')}`, i < 0, i < 0 ? '' : `${txs[i].id} ${results[i].status}`)
+  } catch (e) {
+    check(`${what} as one batch`, false, (e as Error).message.split('\n')[0])
+  }
+}
+
 // FRESH_RESOLVER=1: the parent loses its resolver first (on the fork), so the naming makes the wallet its own
 if (process.env.FRESH_RESOLVER) {
   const hash = await wallet.writeContract({
@@ -101,6 +113,7 @@ const before = await readName(c, owner, label, parent)
 check(`${name} is free to start with`, before.held === 'free', before.held)
 const naming = namingTxs(before, records)
 console.log(`  ${naming.map((t) => t.id).join(', ')}`)
+await together('naming', naming)
 await send(naming)
 
 const after = await readName(c, owner, label, parent)
@@ -126,6 +139,7 @@ check('running the naming again would only rewrite the records', namingTxs(after
 // The kill switch
 const kill = killTxs(after)
 console.log(`  kill switch: ${kill.map((t) => t.id).join(', ')}`)
+await together('the kill switch', kill)
 await send(kill)
 check(`${name} no longer resolves`, (await c.getEnsAddress({ name })) === null)
 check('knock.key is gone through the Universal Resolver', (await c.getEnsText({ name, key: 'knock.key' })) === null)

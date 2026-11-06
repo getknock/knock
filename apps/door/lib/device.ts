@@ -84,14 +84,14 @@ export async function confirmOn(w: Wedgie, c: { name: string; nullifier: Hex; po
   if (m.type !== 'knock_confirmed' || !same(m.node, deviceNode(c.name))) refused(m, 'confirmation')
 }
 
-/** The kill switch's last step: the Wedgie forgets its name and binding. Knock 4 had no knock_forget, so there
- *  its name is kept, marked revoked, with no binding. */
-export async function forgetOn(w: Wedgie, name: string | null) {
+/** The kill switch's last step: the Wedgie forgets its name and binding ('forgot'). Knock 4 had no knock_forget,
+ *  so there its name is kept, marked revoked, with no binding, and its home screen keeps showing it ('revoked'). */
+export async function forgetOn(w: Wedgie, name: string | null): Promise<'forgot' | 'revoked'> {
   const m = await w.ask({ type: 'knock_forget' })
-  if (m.type === 'knock_forgotten') return
+  if (m.type === 'knock_forgotten') return 'forgot'
   if (m.error === 'bad_request' && name) {
     const r = await w.ask({ type: 'knock_confirm', name, status: 'revoked' })
-    if (r.type === 'knock_confirmed') return
+    if (r.type === 'knock_confirmed') return 'revoked'
   }
   refused(m, 'forgetting')
 }

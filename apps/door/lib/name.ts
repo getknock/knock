@@ -13,18 +13,37 @@ import { become, confirmOn, forgetOn } from './device'
 import { type Records, type Tx, killTxs, namingTxs, readName, recordTexts } from './ens'
 import { boundTx } from './knockd'
 import { Stopped } from './stopped'
-import { type Connected, send } from './wallet'
+import { type Connected, send, sendBatch } from './wallet'
 import type { Wedgie } from './wedgie'
+
+/** The wallet's part: every call as one transaction (batch), or one transaction each (tx). */
+export type WalletStep = { step: 'batch'; txs: Tx[] } | { step: 'tx'; tx: Tx; i: number; n: number }
 
 export type NameStep =
   | { step: 'binding' }
   | { step: 'plan'; txs: Tx[] }
   | { step: 'device' }
-  | { step: 'tx'; tx: Tx; i: number; n: number }
+  | WalletStep
   | { step: 'check' }
   | { step: 'confirm' }
 
-export type Sent = { tx: Tx; hash: Hex; gasUsed: bigint }
+/** A transaction the wallet sent, and the calls in it: one, or a batch's every call (D25). */
+export type Sent = { txs: Tx[]; hash: Hex; gasUsed: bigint }
+
+/** The calls, as one atomic transaction when the wallet can (D25), else one at a time, in order. */
+async function sendAll(c: Connected, txs: Tx[], on: (s: WalletStep) => void): Promise<Sent[]> {
+  if (c.batch && txs.length > 1) {
+    on({ step: 'batch', txs })
+    const b = await sendBatch(c, txs)
+    if (b) return [{ txs, hash: b.hash, gasUsed: b.gasUsed }]
+  }
+  const sent: Sent[] = []
+  for (const [i, tx] of txs.entries()) {
+    on({ step: 'tx', tx, i, n: txs.length })
+    sent.push({ txs: [tx], ...(await send(c, tx)) })
+  }
+  return sent
+}
 
 /** ENS as a verifier reads it, through the Universal Resolver: the name resolves to the wallet, with every record. */
 export async function checkName(c: PublicClient, name: string, r: Records) {
@@ -62,11 +81,7 @@ export async function nameWedgie(
 
   on({ step: 'device' })
   await become(w, name, device.key)
-  const sent: Sent[] = []
-  for (const [i, tx] of txs.entries()) {
-    on({ step: 'tx', tx, i, n: txs.length })
-    sent.push({ tx, ...(await send(c, tx)) })
-  }
+  const sent = await sendAll(c, txs, on)
   on({ step: 'check' })
   await checkName(c.chain, name, records)
   on({ step: 'confirm' })
@@ -74,22 +89,23 @@ export async function nameWedgie(
   return { name, records, sent }
 }
 
-export type KillStep = { step: 'tx'; tx: Tx; i: number; n: number } | { step: 'check' } | { step: 'device' }
+export type KillStep = WalletStep | { step: 'check' } | { step: 'device' }
 
-/** The kill switch. With no Wedgie connected (a lost one), ENS alone: no verifier takes its key after this. */
+/**
+ * The kill switch. With no Wedgie connected (a lost one), ENS alone: no verifier takes its key after this. What the
+ * Wedgie did: forgot its name and binding (Knock 5), only marked the name revoked (Knock 4, which keeps showing
+ * it), or nothing (not connected).
+ */
 export async function killName(w: Wedgie | null, c: Connected, name: string, on: (s: KillStep) => void) {
   const [label, ...rest] = name.split('.')
   const txs = killTxs(await readName(c.chain, c.account, label, rest.join('.')))
-  const sent: Sent[] = []
-  for (const [i, tx] of txs.entries()) {
-    on({ step: 'tx', tx, i, n: txs.length })
-    sent.push({ tx, ...(await send(c, tx)) })
-  }
+  const sent = await sendAll(c, txs, on)
   on({ step: 'check' })
   if ((await c.chain.getEnsAddress({ name })) !== null) throw new Stopped(`ENS still resolves ${name}.`)
+  let wedgie: 'forgot' | 'revoked' | 'away' = 'away'
   if (w) {
     on({ step: 'device' })
-    await forgetOn(w, name)
+    wedgie = await forgetOn(w, name)
   }
-  return { sent, forgotten: Boolean(w) }
+  return { sent, wedgie }
 }

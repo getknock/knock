@@ -18,7 +18,10 @@ export function WalletBox({ connected, onConnect }: { connected: Connected | nul
     return (
       <p className="wallet">
         <span className="dot ready" /> {connected.name}, <span className="hex">{short(connected.account)}</span>, on
-        Ethereum
+        Ethereum.
+        {connected.batch
+          ? ' It batches calls: each step is one transaction, all of it or none.'
+          : " It doesn't batch calls, so each ENS write is its own transaction."}
       </p>
     )
   return (
