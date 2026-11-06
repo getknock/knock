@@ -185,7 +185,7 @@ fn u64_of(n: &Num, what: &str) -> Result<u64, Refusal> {
     u64::try_from(n.0).map_err(|_| Refusal::bad(format!("{what}: a uint64")))
 }
 
-fn bytes_of(s: &str, len: usize, what: &str) -> Result<Vec<u8>, Refusal> {
+pub fn bytes_of(s: &str, len: usize, what: &str) -> Result<Vec<u8>, Refusal> {
     alloy::primitives::hex::decode(s)
         .ok()
         .filter(|b| b.len() == len)
@@ -542,8 +542,8 @@ pub struct BoundRequest {
 
 /// POST /bound: a binding as World Chain has it, from its transaction: the Bound log one of our KnockBindings
 /// emitted in it (whoever sent it). The Console names a Wedgie in ENS only after this says so, since its records
-/// point at the binding (`knock.poh`, `knock.nullifier`). Logs can't be searched for here: the RPC answers
-/// `eth_getLogs` for 100 blocks at a time, so the Console remembers its bindings' transactions.
+/// point at the binding (`knock.poh`, `knock.nullifier`). A Wedgie's latest binding, found by its key, is
+/// /binding's (bindings.rs).
 pub async fn bound(
     State(app): State<Arc<App>>,
     Json(q): Json<BoundRequest>,

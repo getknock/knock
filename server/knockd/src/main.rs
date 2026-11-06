@@ -2,7 +2,8 @@
 //! proof for the deployment's action that starts a session, and for every binding after it, a session proof
 //! (D24). It sends `KnockBinding.bind()` or `bindAgain()` for a device that said yes on its own screen, the gas
 //! key paying (`/bind`). It also reads a binding back from its transaction (`/bound`), for the Console to name the
-//! device in ENS with, and finds a returning human's session (`/human`).
+//! device in ENS with, finds a Wedgie's latest binding by its key (`/binding`), and finds a returning human's
+//! session (`/human`).
 //!
 //! Its secrets are read here and nowhere else (PLAN.md §5): the World RP key from its key file, and the gas key
 //! and World Chain RPC from `.env`, as are the app's World IDs. None of them is ever logged or sent back, and
@@ -11,6 +12,7 @@
 //!   cargo run -p knockd        (from the repo root; KNOCKD_ADDR, KNOCKD_ORIGINS, KNOCKD_ENV, WORLD_RP_KEY_FILE)
 
 mod bind;
+mod bindings;
 mod rp;
 
 use alloy::network::EthereumWallet;
@@ -55,6 +57,8 @@ pub struct Env {
     pub action: String,
     pub verifier: Address,
     pub registry: Address,
+    /// The block it was deployed in: where its Bound logs start
+    pub block: u64,
 }
 
 pub struct App {
@@ -72,6 +76,8 @@ pub struct App {
     pub simulations: Window,
     pub sends: Window,
     pub lookups: Window,
+    /// Every Bound so far, for /binding
+    pub index: bindings::Index,
     /// One bind at a time: the gas key's nonces stay in order.
     pub sending: tokio::sync::Mutex<()>,
 }
@@ -259,6 +265,9 @@ fn envs() -> anyhow::Result<(Env, Env)> {
                 .to_string(),
             verifier: a("WorldIDVerifier")?,
             registry: a("RpRegistry")?,
+            block: d[name]["block"]
+                .as_u64()
+                .with_context(|| format!("deployments: {name}.block"))?,
         })
     };
     Ok((one("staging")?, one("production")?))
@@ -383,6 +392,7 @@ async fn main() -> anyhow::Result<()> {
     let rpc = var("WORLD_RPC")?;
     let rp_id = var("WORLD_RP_ID")?;
     let (staging, production) = envs()?;
+    let index = bindings::Index::new(staging.block.min(production.block));
     let app = App {
         rp: rp_number(&rp_id)?,
         rp_id,
@@ -403,6 +413,7 @@ async fn main() -> anyhow::Result<()> {
         simulations: Window::new(120, Duration::from_secs(3600)),
         sends: Window::new(12, Duration::from_secs(3600)),
         lookups: Window::new(600, Duration::from_secs(3600)),
+        index,
         sending: tokio::sync::Mutex::new(()),
     };
     if std::env::var("KNOCKD_SKIP_CHECKS").is_err() {
@@ -411,6 +422,20 @@ async fn main() -> anyhow::Result<()> {
             "checked on World Chain: both KnockBindings are v3 with the deployments' actions and our RP, and World knows our RP key"
         );
     }
+
+    let app = Arc::new(app);
+    // Every binding so far, read once now, so the Console's first /binding is quick
+    tokio::spawn({
+        let app = app.clone();
+        async move {
+            match app.index.catch_up(&app).await {
+                Ok(()) => tracing::info!("read World Chain's bindings"),
+                Err(e) => {
+                    tracing::warn!("reading World Chain's bindings: {e}; /binding tries again")
+                }
+            }
+        }
+    });
 
     let origins = std::env::var("KNOCKD_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:3000,http://127.0.0.1:3000".into());
@@ -428,9 +453,10 @@ async fn main() -> anyhow::Result<()> {
         .route("/bind", post(bind::bind))
         .route("/bound", post(bind::bound))
         .route("/human", post(bind::human))
+        .route("/binding", post(bindings::binding))
         .layer(DefaultBodyLimit::max(16 * 1024))
         .layer(cors)
-        .with_state(Arc::new(app));
+        .with_state(app.clone());
     let addr = std::env::var("KNOCKD_ADDR").unwrap_or_else(|_| "127.0.0.1:8787".into());
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("knockd on http://{addr}");
