@@ -11,18 +11,20 @@
     "bot": "bun scripts/bot.ts"
   },
   "devDependencies": {
-    "@knock-dev/protocol": "workspace:*",
     "@types/bun": "1.4.4",
     "@types/node": "26.6.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
-    "typescript": "7.0.2",
-    "viem": "^2.57.16"
+    "typescript": "7.0.2"
   },
   "dependencies": {
     "@knock-dev/door-sdk": "workspace:*",
+    "@knock-dev/protocol": "workspace:*",
+    "@knock-dev/verify": "workspace:*",
+    "@libsql/client": "^0.18.0",
     "next": "16.4.5",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "viem": "^2.57.16"
   }
 }

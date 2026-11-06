@@ -1,0 +1,22 @@
+{
+  "name": "@knock-dev/verify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "bun test",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@knock-dev/protocol": "workspace:*",
+    "viem": "^2.57.16"
+  },
+  "devDependencies": {
+    "@libsql/client": "^0.18.0",
+    "@types/bun": "^1.4.4",
+    "typescript": "^7.0.2"
+  }
+}
