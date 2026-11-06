@@ -4,7 +4,7 @@ import type { NextConfig } from 'next'
 const config: NextConfig = {
   // Client-only, so it can be served as plain files (D8).
   output: 'export',
-  transpilePackages: ['@knock-dev/protocol'],
+  transpilePackages: ['@knock-dev/protocol', '@knock-dev/door-sdk'],
   // The monorepo's root: the Console reads contracts/deployments/480.json.
   turbopack: { root: fileURLToPath(new URL('../..', import.meta.url)) },
   // next dev writes an AGENTS.md otherwise

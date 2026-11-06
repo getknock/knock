@@ -9,6 +9,7 @@
       "name": "@knock-dev/door",
       "version": "0.1.0",
       "dependencies": {
+        "@knock-dev/door-sdk": "workspace:*",
         "@knock-dev/protocol": "workspace:*",
         "@worldcoin/idkit-core": "4.6.0",
         "next": "16.4.5",
@@ -24,6 +25,14 @@
         "@types/react-dom": "19.3.0",
         "@types/w3c-web-serial": "1.0.9",
         "typescript": "7.0.2",
+      },
+    },
+    "packages/door-sdk": {
+      "name": "@knock-dev/door-sdk",
+      "version": "0.1.0",
+      "devDependencies": {
+        "@types/bun": "^1.4.4",
+        "typescript": "^7.0.2",
       },
     },
     "packages/protocol": {
@@ -99,6 +108,8 @@
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.35.5", "", { "os": "win32", "cpu": "x64" }, "sha512-x76eH0vEiHlcMQu8Y8IenntaACtddpT6W0wmXtWrnKcnKI7ME5DdgqhAD6SEWOEl1v2zDvkZDhFA9KnURwpfqg=="],
 
     "@knock-dev/door": ["@knock-dev/door@workspace:apps/door"],
+
+    "@knock-dev/door-sdk": ["@knock-dev/door-sdk@workspace:packages/door-sdk"],
 
     "@knock-dev/protocol": ["@knock-dev/protocol@workspace:packages/protocol"],
 

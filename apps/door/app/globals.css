@@ -558,3 +558,49 @@ a.primary {
   box-shadow: none;
   cursor: not-allowed;
 }
+
+/* The Door: a small popup. The site's origin first and biggest, the Wedgie under it, then what to do. */
+.door {
+  display: grid;
+  gap: 1rem;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 1rem 1.25rem 1.5rem;
+}
+
+.door-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 800;
+}
+
+.door-bar img {
+  width: 24px;
+  height: 24px;
+}
+
+.asker {
+  text-align: center;
+}
+
+.asker .origin {
+  margin: 0 0 0.25rem;
+  font-family: var(--mono), ui-monospace, monospace;
+  font-size: 1.15rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.door .wedgie {
+  width: min(100%, 260px);
+}
+
+.door-say {
+  min-height: 3rem;
+  text-align: center;
+}
+
+.door .actions {
+  justify-content: center;
+}

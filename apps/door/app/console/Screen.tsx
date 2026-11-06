@@ -10,6 +10,7 @@ export type View =
   | { kind: 'qr'; n: number; bits: string }
   | { kind: 'bind'; key: string; nullifier: string }
   | { kind: 'become'; name: string }
+  | { kind: 'knock'; name: string; origin: string }
 
 const INK = '#000000'
 const MUTED = '#6b6b6b'
@@ -46,14 +47,23 @@ function draw(c: CanvasRenderingContext2D, view: View) {
     return
   }
   // The BIND and BECOME pages: what it does, in words, and whose question it is
-  const title = view.kind === 'become' ? 'BECOME' : 'BIND'
+  const title = view.kind === 'become' ? 'BECOME' : view.kind === 'knock' ? 'KNOCK' : 'BIND'
   c.font = `800 18px ${mono.style.fontFamily}`
   const w = c.measureText(title).width
   logo(p, Math.round(120 - (34 + w) / 2), 6, 2)
   c.fillStyle = INK
   c.textBaseline = 'top'
   c.fillText(title, Math.round(120 - (34 + w) / 2) + 34, 11)
-  text('the Knock Console asks', 214, 11, MUTED, 400)
+  text(view.kind === 'knock' ? 'a bound human' : 'the Knock Console asks', 214, 11, MUTED, 400)
+  if (view.kind === 'knock') {
+    // The device's own KNOCK page: as which name, for which site, and whose word the site is
+    text(`as ${view.name}`, 52, 13)
+    text('for', 88, 13, MUTED, 400)
+    const lines = view.origin.match(/.{1,24}/g) ?? []
+    lines.forEach((l, i) => text(l, 109 + i * 21, 13))
+    text('unverified: the Door says so', 109 + lines.length * 21 + 8, 11, MUTED, 400)
+    return
+  }
   if (view.kind === 'become') {
     const [first, ...rest] = view.name.split('.')
     text(first, 58, 22)
@@ -93,6 +103,8 @@ export function Screen({ view, waitingForGreen }: { view: View; waitingForGreen:
         ? "The Wedgie asks: bind this wedgie's key to one human's World ID?"
         : view.kind === 'become'
           ? `The Wedgie asks: become ${view.name}? Its key goes in ENS under this name.`
+        : view.kind === 'knock'
+          ? `The Wedgie asks: knock as ${view.name} for ${view.origin}?`
         : view.kind === 'home'
           ? `The Wedgie's home screen: ${view.name ?? 'Knock'}`
           : 'No Wedgie connected'
