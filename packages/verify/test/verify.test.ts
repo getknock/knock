@@ -324,6 +324,11 @@ test('two knocks racing for one challenge: one gets in', async () => {
   expect(`${lost.reason.check} ${lost.reason.error}`).toBe('2 bad_challenge')
 })
 
+test('a no answers with the HTTP status knock-verifier gives it', () => {
+  expect([new Refusal(1, 'bad_assertion', ''), new Refusal(2, 'bad_challenge', ''), new Refusal(8, 'already_entered', '')].map((r) => r.status)).toEqual([400, 403, 403])
+  expect([new Refusal(2, 'busy', ''), new Refusal(6, 'unavailable', ''), new Refusal(0, 'internal', '')].map((r) => r.status)).toEqual([429, 503, 500])
+})
+
 test("a site's origin is one browsers write", () => {
   expect(() => new Verifier({ origin: 'bouncer.example', store: memoryStore() })).toThrow()
   expect(() => new Verifier({ origin: 'http://localhost:3001', store: memoryStore() })).not.toThrow()

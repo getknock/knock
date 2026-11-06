@@ -366,12 +366,11 @@ async fn main() -> anyhow::Result<()> {
     };
     let store = Store::open(&env("VERIFIER_DB", "knock-verifier.db")).context("VERIFIER_DB")?;
     // Knock's KnockBinding, or a network of one's own: its KnockBinding v3 on World Chain (D34)
-    let contract = match std::env::var("VERIFIER_KNOCK_BINDING") {
-        Ok(a) => a
-            .trim()
+    let contract = match env("VERIFIER_KNOCK_BINDING", "knock").trim() {
+        "knock" => knock_verify::accepted_binding().map_err(anyhow::Error::msg)?,
+        a => a
             .parse()
-            .map_err(|_| anyhow!("VERIFIER_KNOCK_BINDING: 0x and 40 hex digits"))?,
-        Err(_) => knock_verify::accepted_binding().map_err(anyhow::Error::msg)?,
+            .map_err(|_| anyhow!("VERIFIER_KNOCK_BINDING: knock, or 0x and 40 hex digits"))?,
     };
     let verifier =
         Verifier::new(chain, store, origin.clone(), contract, days * 86_400).strict(strict);

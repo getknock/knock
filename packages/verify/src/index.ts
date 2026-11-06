@@ -65,6 +65,15 @@ export class Refusal extends Error {
     this.name = 'Refusal'
   }
 
+  /** The HTTP status knock-verifier answers this no with: 400 for check 1, 403 for checks 2–8, 429 when busy, 503
+   *  when a chain couldn't be read, 500 for the verifier's own trouble */
+  get status(): number {
+    if (this.error === 'busy') return 429
+    if (this.error === 'unavailable') return 503
+    if (this.check === 0) return 500
+    return this.check === 1 ? 400 : 403
+  }
+
   /** As the Rust verifier's HTTP API says no: `{ok: false, check, error, why}` */
   toJSON() {
     return { ok: false as const, check: this.check, error: this.error, why: this.why }
