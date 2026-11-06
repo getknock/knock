@@ -22,9 +22,11 @@ export function db(): Promise<Db> {
 
 export const COOKIE = 'club_session'
 
-/** The human this request's session is, if any */
+/** The human this request's session is, if any. The cookie first: a page that reads it is rendered for each request,
+ *  so no build opens the database, and a visitor with no session costs no query. */
 export async function me(): Promise<Me | null> {
-  return sessionOf(await db(), (await cookies()).get(COOKIE)?.value, Date.now())
+  const token = (await cookies()).get(COOKIE)?.value
+  return token ? sessionOf(await db(), token, Date.now()) : null
 }
 
 /** The club's origin, what Wedgies sign for: CLUB_ORIGIN, never a request's Host header outside development, since a
