@@ -70,8 +70,8 @@ describe('helpers', () => {
   it("hash a binding signal as the key's bytes and then the name's node, not as UTF-8 text", () => {
     const node = deviceNode(vectors.device.name)
     const signal = bindSignal(compressed, node)
-    expect(signal).toBe(concat([compressed, node]).toLowerCase())
-    expect(signalHash(signal)).toBe(hashToField(hexToBytes(concat([compressed, node]))))
+    expect(signal).toBe(concat([compressed, node] as Hex[]).toLowerCase())
+    expect(signalHash(signal)).toBe(hashToField(hexToBytes(concat([compressed, node] as Hex[]))))
     expect(signalHash(signal)).not.toBe(hashToField(stringToBytes(signal)))
     expect(signalHash(signal)).toBe(vectors.bind.signalHash)
     // Another name, another signal: a proof for one name is no proof for another (D22)
