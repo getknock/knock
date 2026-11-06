@@ -73,6 +73,8 @@ struct Fake {
     deep: Mutex<Records>,
     receipt: Mutex<Option<Receipt>>,
     final_block: Mutex<u64>,
+    /// Each time the safe or finalized head was asked for, which.
+    asked_final: Mutex<Vec<Strict>>,
     down: Mutex<bool>,
     reads: Mutex<Vec<u64>>,
 }
@@ -101,7 +103,8 @@ impl Chain for Fake {
         );
         Ok(self.receipt.lock().unwrap().clone())
     }
-    async fn final_block(&self) -> Result<u64, Unavailable> {
+    async fn final_block(&self, strict: Strict) -> Result<u64, Unavailable> {
+        self.asked_final.lock().unwrap().push(strict);
         Ok(*self.final_block.lock().unwrap())
     }
 }
@@ -112,6 +115,7 @@ fn verifier() -> Verifier<Fake> {
         deep: Mutex::new(records()),
         receipt: Mutex::new(Some(receipt())),
         final_block: Mutex::new(37_300_100),
+        asked_final: Mutex::new(vec![]),
         down: Mutex::new(false),
         reads: Mutex::new(vec![]),
     };
@@ -372,8 +376,8 @@ async fn records_that_arent_knocks() {
 }
 
 #[tokio::test]
-async fn the_binding_is_for_this_key_human_and_name_final_and_young() {
-    let v = verifier();
+async fn the_binding_is_for_this_key_human_and_name_young_and_final_for_a_strict_site() {
+    let v = verifier().strict(Strict::Safe);
     let other_contract: Address = "0x639e41f70CbD1F1395BaC76De427D1469B46B190"
         .parse()
         .unwrap();
@@ -432,6 +436,68 @@ async fn the_binding_is_for_this_key_human_and_name_final_and_young() {
     *v.chain.receipt.lock().unwrap() = Some(receipt());
     *v.chain.final_block.lock().unwrap() = 37_300_000;
     v.verify(&the_vectors_knock(), None, NOW).await.unwrap();
+}
+
+// D26: a binding counts once it's in a block, unless the site is strict
+#[tokio::test]
+async fn a_site_isnt_strict_unless_it_says_so() {
+    let v = verifier();
+    assert_eq!(v.strict, Strict::Off);
+    *v.chain.final_block.lock().unwrap() = 37_299_999; // the binding's block is past World Chain's safe head
+    let k = v.verify(&the_vectors_knock(), None, NOW).await.unwrap();
+    assert_eq!(k.binding.block, 37_300_000);
+    assert!(
+        v.chain.asked_final.lock().unwrap().is_empty(),
+        "the safe head isn't even read"
+    );
+}
+
+#[tokio::test]
+async fn a_strict_site_waits_for_the_head_it_asked_for() {
+    for (strict, wait) in [
+        (Strict::Safe, "every ~6 minutes"),
+        (Strict::Finalized, "~20–25 minutes"),
+    ] {
+        let v = verifier().strict(strict);
+        *v.chain.final_block.lock().unwrap() = 37_299_999;
+        let e = v
+            .verify(&the_vectors_knock(), None, NOW)
+            .await
+            .expect_err("a binding past the head a strict site waits for");
+        assert_eq!((e.check, e.error), (6, "binding_not_final"));
+        assert!(
+            e.why.starts_with("this site is strict") && e.why.contains(wait),
+            "{}",
+            e.why
+        );
+        // Once the head reaches the binding's block, the same knock is taken: the refusal used nothing up
+        *v.chain.final_block.lock().unwrap() = 37_300_000;
+        v.verify(&the_vectors_knock(), None, NOW).await.unwrap();
+        assert_eq!(*v.chain.asked_final.lock().unwrap(), vec![strict, strict]);
+    }
+}
+
+#[test]
+fn strict_as_a_site_says_it() {
+    for (said, strict) in [
+        ("", Strict::Off),
+        ("off", Strict::Off),
+        ("false", Strict::Off),
+        ("0", Strict::Off),
+        ("on", Strict::Safe),
+        ("true", Strict::Safe),
+        ("1", Strict::Safe),
+        (" Safe ", Strict::Safe),
+        ("finalized", Strict::Finalized),
+    ] {
+        assert_eq!(said.parse::<Strict>(), Ok(strict), "{said:?}");
+    }
+    assert!("latest".parse::<Strict>().is_err());
+    assert_eq!(
+        serde_json::to_value(Strict::Finalized).unwrap(),
+        json!("finalized")
+    );
+    assert_eq!(Strict::default().as_str(), "off");
 }
 
 #[tokio::test]

@@ -362,6 +362,60 @@ pub struct Log {
     pub data: Vec<u8>,
 }
 
+/// How final a binding has to be before V6 takes it (D26). Not strict by default: a binding counts once its
+/// transaction is in a World Chain block, seconds after it's sent. A strict site waits until World Chain has posted
+/// that block to Ethereum (its safe head: it posts every ~6 minutes), or until that post is final there (its
+/// finalized head, ~20–25 minutes).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Strict {
+    /// Any block: no wait.
+    #[default]
+    Off,
+    /// World Chain's safe head: the binding's block is in a batch on Ethereum.
+    Safe,
+    /// World Chain's finalized head: that batch is final on Ethereum.
+    Finalized,
+}
+
+impl Strict {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Strict::Off => "off",
+            Strict::Safe => "safe",
+            Strict::Finalized => "finalized",
+        }
+    }
+
+    /// What a knock whose binding isn't final enough yet is told.
+    fn wait(self) -> &'static str {
+        match self {
+            Strict::Finalized => {
+                "this site is strict: it takes a binding once World Chain's post of it to Ethereum is final, \
+                 ~20–25 minutes after binding. Try again later"
+            }
+            _ => {
+                "this site is strict: it takes a binding once World Chain has posted it to Ethereum, which it does \
+                 every ~6 minutes. Try again in a few minutes"
+            }
+        }
+    }
+}
+
+impl std::str::FromStr for Strict {
+    type Err = String;
+
+    /// `off` (or nothing, `false`, `0`), `on` (`true`, `1`, `safe`) or `finalized`.
+    fn from_str(s: &str) -> Result<Self, String> {
+        match s.trim().to_ascii_lowercase().as_str() {
+            "" | "off" | "false" | "0" | "no" => Ok(Strict::Off),
+            "on" | "true" | "1" | "yes" | "safe" => Ok(Strict::Safe),
+            "finalized" => Ok(Strict::Finalized),
+            x => Err(format!("strict: off, on (safe) or finalized, not {x}")),
+        }
+    }
+}
+
 /// The binding a knock stands on.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -379,14 +433,15 @@ pub struct Wanted {
     pub nullifier: U256,
     pub key_hash: B256,
     pub node: B256,
-    /// The highest World Chain block counted as final.
-    pub final_block: u64,
+    /// How final the binding has to be, and the highest World Chain block that is: none when not strict.
+    pub final_block: Option<(Strict, u64)>,
     pub now: u64,
     pub max_age: u64,
 }
 
 /// V6, the binding: the transaction `knock.poh` names succeeded on the accepted KnockBinding, with a `Bound` for this
-/// key, this human and this name, final, and its proof no older than `max_age` (D23).
+/// key, this human and this name, final enough for a strict site (D26), and its proof no older than `max_age`
+/// (D23).
 pub fn check_binding(r: Option<&Receipt>, w: &Wanted) -> Result<Binding, Refusal> {
     let tx = w.tx;
     let r = r.ok_or_else(|| {
@@ -421,12 +476,10 @@ pub fn check_binding(r: Option<&Receipt>, w: &Wanted) -> Result<Binding, Refusal
                 format!("transaction {tx} holds no Bound from Knock's KnockBinding for this key, human and name"),
             )
         })?;
-    if r.block > w.final_block {
-        return Err(no(
-            6,
-            "binding_not_final",
-            "the binding isn't final on World Chain yet: try again in a few minutes",
-        ));
+    if let Some((strict, final_block)) = w.final_block
+        && r.block > final_block
+    {
+        return Err(no(6, "binding_not_final", strict.wait()));
     }
     if w.now.saturating_sub(proved_at) > w.max_age {
         return Err(no(
@@ -460,8 +513,8 @@ pub trait Chain: Sync {
         &self,
         tx: B256,
     ) -> impl Future<Output = Result<Option<Receipt>, Unavailable>> + Send;
-    /// The highest World Chain block counted as final (its safe or finalized head).
-    fn final_block(&self) -> impl Future<Output = Result<u64, Unavailable>> + Send;
+    /// World Chain's safe or finalized head, for a strict site. Never asked when a site isn't strict.
+    fn final_block(&self, strict: Strict) -> impl Future<Output = Result<u64, Unavailable>> + Send;
 }
 
 /// A challenge for the site's page, to hand to the Door.
@@ -492,6 +545,8 @@ pub struct Verifier<C> {
     pub origin: String,
     pub contract: Address,
     pub max_binding_age: u64,
+    /// How final a binding has to be (D26): not strict unless the site says so.
+    pub strict: Strict,
     cache: Mutex<HashMap<String, (u64, Records)>>,
 }
 
@@ -509,8 +564,15 @@ impl<C: Chain> Verifier<C> {
             origin,
             contract,
             max_binding_age,
+            strict: Strict::Off,
             cache: Mutex::new(HashMap::new()),
         }
+    }
+
+    /// A strict verifier: it takes a binding only once World Chain's safe or finalized head has reached it (D26).
+    pub fn strict(mut self, strict: Strict) -> Self {
+        self.strict = strict;
+        self
     }
 
     pub fn challenge(&self, now: u64) -> Result<Challenge, Refusal> {
@@ -645,7 +707,10 @@ impl<C: Chain> Verifier<C> {
             ));
         }
         let receipt = self.chain.receipt(valid.poh).await.map_err(|e| e.at(6))?;
-        let final_block = self.chain.final_block().await.map_err(|e| e.at(6))?;
+        let final_block = match self.strict {
+            Strict::Off => None,
+            s => Some((s, self.chain.final_block(s).await.map_err(|e| e.at(6))?)),
+        };
         let binding = check_binding(
             receipt.as_ref(),
             &Wanted {

@@ -13,14 +13,16 @@ use alloy::primitives::{Address, B256, Bytes, U256, address};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use alloy::sol;
 use alloy::sol_types::SolCall;
-use anyhow::{Context, anyhow, bail, ensure};
+use anyhow::{Context, anyhow, ensure};
 use axum::extract::rejection::JsonRejection;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{HeaderValue, Method, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use knock_verify::{Chain, Log, RECORDS, Receipt, Records, Refusal, Store, Unavailable, Verifier};
+use knock_verify::{
+    Chain, Log, RECORDS, Receipt, Records, Refusal, Store, Strict, Unavailable, Verifier,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tower_http::cors::{AllowOrigin, CorsLayer};
@@ -54,8 +56,6 @@ fn redact(e: impl std::fmt::Display) -> String {
 struct Rpc {
     eth: DynProvider,
     world: DynProvider,
-    /// The World Chain head a binding has to be under: safe (in a batch on L1) or finalized.
-    finality: BlockNumberOrTag,
 }
 
 impl Rpc {
@@ -144,10 +144,15 @@ impl Chain for Rpc {
         }))
     }
 
-    async fn final_block(&self) -> Result<u64, Unavailable> {
+    async fn final_block(&self, strict: Strict) -> Result<u64, Unavailable> {
+        let tag = match strict {
+            Strict::Finalized => BlockNumberOrTag::Finalized,
+            Strict::Safe => BlockNumberOrTag::Safe,
+            Strict::Off => BlockNumberOrTag::Latest, // never asked: a site that isn't strict takes any block
+        };
         let b = self
             .world
-            .get_block_by_number(self.finality)
+            .get_block_by_number(tag)
             .await
             .map_err(|e| Unavailable(format!("World Chain: {}", redact(e))))?
             .ok_or_else(|| Unavailable("World Chain: no final block".into()))?;
@@ -228,7 +233,7 @@ async fn health(State(app): State<Arc<App>>) -> Json<Value> {
         "origin": v.origin,
         "binding": v.contract,
         "maxBindingDays": v.max_binding_age / 86_400,
-        "final": format!("{:?}", v.chain.finality).to_lowercase(),
+        "strict": v.strict,
     }))
 }
 
@@ -337,11 +342,10 @@ async fn main() -> anyhow::Result<()> {
         knock_verify::ok_origin(&origin),
         "VERIFIER_ORIGIN: https://host[:port], or http://localhost[:port]"
     );
-    let finality = match env("VERIFIER_FINAL", "safe").as_str() {
-        "safe" => BlockNumberOrTag::Safe,
-        "finalized" => BlockNumberOrTag::Finalized,
-        x => bail!("VERIFIER_FINAL: safe or finalized, not {x}"),
-    };
+    // D26: not strict unless the site says so; strict waits for World Chain's safe head, or its finalized one
+    let strict: Strict = env("VERIFIER_STRICT", "off")
+        .parse()
+        .map_err(|e| anyhow!("VERIFIER_STRICT: {e}"))?;
     let days: u64 = env("VERIFIER_MAX_BINDING_DAYS", "365")
         .parse()
         .context("VERIFIER_MAX_BINDING_DAYS: days")?;
@@ -359,14 +363,20 @@ async fn main() -> anyhow::Result<()> {
                 "https://worldchain-mainnet.g.alchemy.com/public",
             )?)
             .erased(),
-        finality,
     };
     let store = Store::open(&env("VERIFIER_DB", "knock-verifier.db")).context("VERIFIER_DB")?;
     let contract = knock_verify::accepted_binding().map_err(anyhow::Error::msg)?;
-    let verifier = Verifier::new(chain, store, origin.clone(), contract, days * 86_400);
+    let verifier =
+        Verifier::new(chain, store, origin.clone(), contract, days * 86_400).strict(strict);
     check(&verifier).await?;
     tracing::info!(
-        "checked: mainnet, World Chain, KnockBinding v3 at {contract}; knocks for {origin}"
+        "checked: mainnet, World Chain, KnockBinding v3 at {contract}; knocks for {origin}; strict: {}",
+        match strict {
+            Strict::Off => "off (a binding counts once it's in a block)",
+            Strict::Safe => "safe (a binding counts once World Chain has posted it to Ethereum)",
+            Strict::Finalized =>
+                "finalized (a binding counts once World Chain's post of it is final on Ethereum)",
+        }
     );
 
     let cors = CorsLayer::new()
@@ -415,7 +425,6 @@ mod live {
                         .unwrap(),
                 )
                 .erased(),
-            finality: BlockNumberOrTag::Safe,
         }
     }
 
@@ -433,8 +442,9 @@ mod live {
             rpc.records("rpi.itzraj.eth", head - 3).await.unwrap(),
             Records::default()
         );
-        let final_block = rpc.final_block().await.unwrap();
+        let final_block = rpc.final_block(Strict::Safe).await.unwrap();
         assert!(final_block < rpc.world.get_block_number().await.unwrap());
+        assert!(rpc.final_block(Strict::Finalized).await.unwrap() <= final_block);
         let Ok(tx) = std::env::var("KNOCK_LIVE_TX") else {
             return;
         };
@@ -449,7 +459,7 @@ mod live {
             ),
             key_hash: r.logs.iter().find(|l| l.topics.len() == 3).unwrap().topics[2],
             node: namehash("rpi.itzraj.eth"),
-            final_block,
+            final_block: Some((Strict::Safe, final_block)),
             now: now(),
             max_age: 365 * 86_400,
         };
