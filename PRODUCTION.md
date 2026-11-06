@@ -6,14 +6,14 @@ Last checked: **2026-11-07**. This is the release list, in deadline order. `PLAN
 
 - [x] **Commit and push the code and docs** (2026-11-07). The Human Club's World ID + wallet flow (D35) and its brand assets are on `getknock/knock`'s `main` (`1b0da32`), and the docs update is on `getknock/docs`'s `main` (`b5fc12f`).
 - [x] **Let Vercel deploy, then check the deployments** (2026-11-07). The new club deployment serves `/in` (it answered 404 before the push and 200 after), and the docs serve the updated Human Club and testing pages. No new environment setting was needed, and there is no manual database migration.
-- [ ] **Run the live Human Club smoke test** at `https://club.getknock.dev`, with a wallet and World App:
+- [x] **Run the live Human Club smoke test** at `https://club.getknock.dev`, with a wallet and World App (2026-11-07, the user):
   1. Come in with World ID and a wallet, making the first Knock binding.
   2. Do a second act, proving the returning World ID session without signing the wallet in again.
   3. Sign one petition with World ID, then try the same petition as the same human with a Wedgie. Check 8 must refuse the second signature.
   4. Start a fundraiser with World ID and check its payout wallet is the wallet that signed in. Send a small gift and check it appears once.
   5. Close that fundraiser with World ID.
-- [ ] **Finish M4 with real hardware.** A real Wedgie knock gets into the Human Club; a revoked or killed test name does not. Use a name made for testing.
-- [ ] **Try the Console's installer on a real Wedgie** (D37): install or update from `getknock/wedgie`'s latest commit, then run a knock. This has passed only against a pretend Wedgie so far.
+- [x] **Finish M4 with real hardware** (2026-11-07, the user): a real Wedgie knock gets into the Human Club; a revoked or killed test name does not.
+- [x] **Try the Console's installer on a real Wedgie** (D37, 2026-11-07, the user): install or update from `getknock/wedgie`'s latest commit, then run a knock.
 - [ ] **Publish the npm packages** when the account's two-factor authentication is available; see below. This does not block the sites.
 - [ ] **Submit Knock's prepared World App listing for review**, only after the user's explicit OK. This does not block the sites either.
 
