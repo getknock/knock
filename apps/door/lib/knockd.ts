@@ -49,8 +49,14 @@ export type SessionId = `session_${string}`
 /** A human Knock knows: their nullifier for the first binding's action, and the session that binding started. */
 export type Human = { nullifier: Hex; session: SessionId }
 
-/** The human's session as KnockBinding has it, by their nullifier or by a session; null when it has none. */
-export async function human(env: Environment, by: { nullifier: Hex } | { session: SessionId }): Promise<Human | null> {
+/**
+ * A human's session as KnockBinding has it, found by their nullifier, a session, a Wedgie's key (the human it was
+ * last bound to, its name killed or not) or a name's node (the human it was last bound for); null when it has none.
+ */
+export async function human(
+  env: Environment,
+  by: { nullifier: Hex } | { session: SessionId } | { key: Hex } | { node: Hex },
+): Promise<Human | null> {
   try {
     const h = await post<{ nullifier: Hex; session: SessionId }>('/human', { environment: env, ...by })
     return { nullifier: h.nullifier, session: h.session }

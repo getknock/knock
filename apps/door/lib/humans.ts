@@ -1,8 +1,7 @@
 /**
- * The Console's memory of the human using it, by environment: their nullifier and Knock session (D24). With it, a
- * Wedgie is bound by a session proof, the same human as before, which World App gives as often as asked. Without
- * it, the next binding is the human's first, a uniqueness proof, which World App gives once. The kill switch
- * leaves it: a human whose Wedgie's name was killed binds again as themselves.
+ * The human who bound in this browser, by environment: their nullifier and Knock session (D24). One of the ways the
+ * Console finds whose session binds next, after the connected Wedgie's own last human; KnockBinding keeps that and
+ * each name's, so another browser finds them too. The kill switch leaves it.
  */
 import type { Hex } from 'viem'
 import type { Environment } from './deployments'

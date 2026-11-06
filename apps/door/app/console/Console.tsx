@@ -1,11 +1,11 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { type Hex, isHex } from 'viem'
-import { normalize } from 'viem/ens'
+import { deviceNode } from '@knock-dev/protocol'
+import type { Hex } from 'viem'
 import { bindWedgie, showQr } from '../../lib/bind'
 import { type Remembered, recall, remember } from '../../lib/bindings'
 import { ACTION, EXPLORER, type Environment } from '../../lib/deployments'
-import { type Device, meet } from '../../lib/device'
+import { type Device, meet, same } from '../../lib/device'
 import { nameProblem } from '../../lib/ens'
 import { forgetHuman, recallHuman, rememberHuman } from '../../lib/humans'
 import { type Human, KNOCKD, type SessionId, type Sent, human as findHuman } from '../../lib/knockd'
@@ -17,6 +17,8 @@ import { Naming } from './Naming'
 import { Screen, type View, short } from './Screen'
 
 type Phase = 'idle' | 'context' | 'qr' | 'device' | 'chain' | 'done' | 'stopped'
+/** Who's binding, and how the Console knows (D24). */
+type Who = { human: Human; whence: string }
 const STEPS = ['context', 'qr', 'device', 'chain'] as const
 
 function say(e: unknown): string {
@@ -36,7 +38,9 @@ export function Console() {
   const [qrUp, setQrUp] = useState(true)
   const [nullifier, setNullifier] = useState<Hex | null>(null)
   const [bound, setBound] = useState<Sent | null>(null)
-  const [me, setMe] = useState<Human | null>(null)
+  const [found, setFound] = useState<Who | null>(null)
+  const [foundByName, setFoundByName] = useState<Who | null>(null)
+  const [picked, setPicked] = useState<Who | null>(null)
   const [asNew, setAsNew] = useState(false)
   const [findBy, setFindBy] = useState('')
   const [finding, setFinding] = useState(false)
@@ -110,39 +114,57 @@ export function Console() {
     }
   }, [device, label, parent])
 
-  // Who's binding: the human this Console bound before, if KnockBinding still has their session (D24)
-  useEffect(() => {
-    const h = recallHuman(env)
-    setMe(h)
-    if (!h || knockd !== 'ready') return
-    let gone = false
-    findHuman(env, { session: h.session })
-      .then((k) => {
-        if (gone || (k && k.nullifier.toLowerCase() === h.nullifier.toLowerCase())) return
-        forgetHuman(env) // another deployment's
-        setMe(null)
-      })
-      .catch(() => {})
-    return () => {
-      gone = true
-    }
-  }, [env, knockd])
+  const name = `${label}.${parent}`
+  const nameOk = Boolean(label && parent && !nameProblem(label, parent))
+  const who = asNew ? null : (picked ?? found ?? foundByName)
+  const me = who?.human ?? null
 
-  // A Wedgie bound with World App knows its human: their session binds the next one
+  // Another environment, another human
   useEffect(() => {
-    if (env !== 'production' || me || asNew || !device?.nullifier || knockd !== 'ready') return
+    setPicked(null)
+    setAsNew(false)
+  }, [env])
+
+  // Who's binding (D24), from KnockBinding, so any browser knows: the human the connected Wedgie was last bound to
+  // (its name killed or not), else the one this browser bound. A failed read leaves what was known.
+  const key = device?.key
+  useEffect(() => {
+    if (knockd !== 'ready') return
     let gone = false
-    findHuman('production', { nullifier: device.nullifier })
-      .then((h) => {
-        if (!h || gone) return
-        rememberHuman('production', h)
-        setMe(h)
-      })
-      .catch(() => {})
+    ;(async () => {
+      try {
+        const byKey = key ? await findHuman(env, { key }) : null
+        if (gone) return
+        if (byKey) return setFound({ human: byKey, whence: "this Wedgie's last human" })
+        const here = recallHuman(env)
+        const h = here ? await findHuman(env, { session: here.session }) : null
+        if (gone) return
+        if (h && here && same(h.nullifier, here.nullifier)) return setFound({ human: h, whence: 'who bound here before' })
+        if (here) forgetHuman(env) // another deployment's
+        setFound(null)
+      } catch {}
+    })()
     return () => {
       gone = true
     }
-  }, [env, me, asNew, device?.nullifier, knockd])
+  }, [env, knockd, key])
+
+  // Else the human the name was last bound for: a new Wedgie under a name its human had before
+  useEffect(() => {
+    setFoundByName(null)
+    if (knockd !== 'ready' || found || !nameOk) return
+    let gone = false
+    const t = setTimeout(() => {
+      Promise.resolve()
+        .then(() => findHuman(env, { node: deviceNode(name) }))
+        .then((h) => !gone && setFoundByName(h ? { human: h, whence: `${name}'s last human` } : null))
+        .catch(() => {})
+    }, 600)
+    return () => {
+      gone = true
+      clearTimeout(t)
+    }
+  }, [env, knockd, found, nameOk, name])
 
   // While the QR is up, ask the Wedgie now and then whether it still is: red, or two minutes, takes it down.
   useEffect(() => {
@@ -164,29 +186,27 @@ export function Console() {
     }
   }
 
-  const name = `${label}.${parent}`
-  const nameOk = Boolean(label && parent && !nameProblem(label, parent))
 
-  /** A returning human, found by one of their Knock names (its knock.nullifier), their nullifier, or a session. */
+  /** A returning human, found on chain by a name they bound (killed or not), their nullifier, or a session. */
   async function findMe() {
     const q = findBy.trim().toLowerCase()
     setProblem(null)
     setFinding(true)
     try {
-      let by: { nullifier: Hex } | { session: SessionId }
+      let by: { nullifier: Hex } | { session: SessionId } | { node: Hex }
       if (/^session_[0-9a-f]{128}$/.test(q)) by = { session: q as SessionId }
       else if (/^0x[0-9a-f]{64}$/.test(q)) by = { nullifier: q as Hex }
       else {
-        if (env !== 'production') throw new Error("Only World App bindings have names: give the Simulator's nullifier.")
-        if (!wallet) throw new Error(`Connect your wallet below to read ${q}'s records, or give your nullifier.`)
-        const n = await wallet.chain.getEnsText({ name: normalize(q), key: 'knock.nullifier' }).catch(() => null)
-        if (!n || !isHex(n) || n.length !== 66) throw new Error(`${q} has no knock.nullifier: is it a Knock name that's still live?`)
-        by = { nullifier: n }
+        try {
+          by = { node: deviceNode(q) }
+        } catch {
+          throw new Error(`${q} isn't a name, a nullifier (0x and 64 hex digits) or a session id.`)
+        }
       }
       const h = await findHuman(env, by)
-      if (!h) throw new Error(`Knock has no session for that human on ${env}. Bind as a new human.`)
+      if (!h) throw new Error(`Knock has no human on ${env} for ${q}: nothing was bound by it there.`)
       rememberHuman(env, h)
-      setMe(h)
+      setPicked({ human: h, whence: `found by ${q.length > 24 ? short(q as Hex) : q}` })
       setAsNew(false)
       setFindBy('')
     } catch (e) {
@@ -198,7 +218,7 @@ export function Console() {
 
   function bindAsNew() {
     forgetHuman(env)
-    setMe(null)
+    setPicked(null)
     setAsNew(true)
   }
 
@@ -237,7 +257,7 @@ export function Console() {
       remember(device.key, out.environment, { tx: out.tx, name })
       const h = { nullifier: out.bound.nullifier, session: out.session }
       rememberHuman(out.environment, h)
-      setMe(h)
+      setPicked({ human: h, whence: 'just bound' })
       setAsNew(false)
       if (out.environment === 'production') setJustBound({ tx: out.tx, name })
       setPhase('done')
@@ -370,8 +390,8 @@ export function Console() {
               {me ? (
                 <>
                   <p>
-                    Binding as you, human <span className="hex">{short(me.nullifier)}</span>: World App proves your Knock
-                    session, for this Wedgie or any other, as often as you bind.
+                    Binding as human <span className="hex">{short(me.nullifier)}</span> ({who?.whence}). World App proves
+                    their Knock session, for this Wedgie or any other, as often as they bind.
                   </p>
                   <button type="button" className="quiet" onClick={bindAsNew} disabled={busy || elsewhere}>
                     Bind as someone else
@@ -381,16 +401,15 @@ export function Console() {
                 <>
                   <p>
                     A first binding: World App proves you for Knock once, and that proof starts your Knock session. Bound a
-                    Wedgie before? Connect it, or find yourself by
-                    {env === 'production' ? ' one of your Knock names or' : ''} your nullifier.
+                    Wedgie before? Connect it, or find yourself by a name you bound, killed ones too, or your nullifier.
                   </p>
                   <div className="find">
                     <input
                       value={findBy}
                       onChange={(e) => setFindBy(e.target.value)}
-                      placeholder={env === 'production' ? 'wedgie.itzraj.eth or 0x…' : '0x…'}
+                      placeholder="wedgie.itzraj.eth or 0x…"
                       spellCheck={false}
-                      aria-label="One of your Knock names, or your nullifier"
+                      aria-label="A name you bound, or your nullifier"
                       disabled={busy || elsewhere || finding}
                     />
                     <button

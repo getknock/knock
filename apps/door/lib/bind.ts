@@ -38,7 +38,7 @@ const RP_TROUBLE = new Set([
 /** What World App's no means for a binding, in words a person can act on. */
 export function worldIdSays(error: string, bySession: boolean): string {
   if ((error === 'nullifier_replayed' || error === 'max_verifications_reached') && !bySession)
-    return "World App has proved you for Knock before, and proves a human for it once. Bind as yourself instead: connect a Wedgie you've bound, or find yourself by one of your Knock names."
+    return "World App has proved you for Knock already, and proves each human once. Bind as yourself instead: connect a Wedgie you've bound before, or find yourself by a name you've bound, killed ones too."
   if (error === 'user_rejected' || error === 'verification_rejected') return 'You said no in World App, so nothing was bound.'
   if (error === 'credential_unavailable' || error === 'world_id_4_not_available')
     return "World App has no proof-of-human credential for you, which a binding asks for."

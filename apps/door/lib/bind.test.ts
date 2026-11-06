@@ -224,7 +224,7 @@ describe('bindWedgie', () => {
     knockd()
     answer = { success: false, error: 'nullifier_replayed' }
     await expect(bindWedgie(wedgie().w, 'staging', KEY, NAME, null, () => {}, new AbortController().signal)).rejects.toThrow(
-      'proves a human for it once',
+      'proves each human once',
     )
     expect(sent.map((x) => x.path)).toEqual(['/rp-context'])
   })
