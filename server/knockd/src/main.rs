@@ -9,7 +9,13 @@
 //! and World Chain RPC from `.env`, as are the app's World IDs. None of them is ever logged or sent back, and
 //! nothing about who asked is logged: no IPs.
 //!
-//!   cargo run -p knockd        (from the repo root; KNOCKD_ADDR, KNOCKD_ORIGINS, KNOCKD_ENV, WORLD_RP_KEY_FILE)
+//! Anyone can run it (D34). Without an RP key (WORLD_RP_KEY_FILE=none) it signs no World ID requests and does
+//! everything else: it relays bindings with its own gas key and answers lookups, and the Console asks a knockd
+//! that holds the RP key for request contexts. A network of one's own (its own World ID app, RP and KnockBinding)
+//! gives its deployments in KNOCK_DEPLOYMENTS.
+//!
+//!   cargo run -p knockd        (from the repo root; KNOCKD_ADDR, KNOCKD_ORIGINS, KNOCKD_ENV, WORLD_RP_KEY_FILE,
+//!                               KNOCK_DEPLOYMENTS)
 
 mod bind;
 mod bindings;
@@ -39,7 +45,8 @@ pub const CHAIN_ID: u64 = 480;
 const VERSION: u64 = 3;
 /// How long a signed request lasts: World's default.
 const RP_TTL: u64 = 300;
-/// Our KnockBinding deployments and World's contracts they use (D18: public protocol contracts).
+/// Our KnockBinding deployments and World's contracts they use (D18: public protocol contracts), unless
+/// KNOCK_DEPLOYMENTS names another file.
 const DEPLOYMENTS: &str = include_str!("../../../contracts/deployments/480.json");
 
 sol! {
@@ -61,11 +68,17 @@ pub struct Env {
     pub block: u64,
 }
 
-pub struct App {
-    rp_key: PrivateKeySigner,
+/// The World ID RP this knockd signs requests for: its key, and its app's World IDs.
+pub struct Signer {
+    key: PrivateKeySigner,
     app_id: String,
     rp_id: String,
-    pub rp: u64,
+    rp: u64,
+}
+
+pub struct App {
+    /// None: this knockd signs no World ID requests (no RP key file), and does everything else.
+    signer: Option<Signer>,
     /// World Chain, through the gas key's wallet.
     pub chain: DynProvider,
     pub gas: Address,
@@ -191,6 +204,14 @@ async fn rp_context(
     State(app): State<Arc<App>>,
     Json(q): Json<ContextRequest>,
 ) -> Result<Json<Value>, Refusal> {
+    let Some(signer) = &app.signer else {
+        return Err(Refusal::new(
+            StatusCode::NOT_IMPLEMENTED,
+            "no_rp_key",
+            "this knockd has no World ID RP key, so it signs no requests: ask the knockd that holds your network's \
+             (the Console's NEXT_PUBLIC_KNOCKD_RP)",
+        ));
+    };
     let env = app.env(q.environment.as_deref().unwrap_or("production"))?;
     let action = (!q.session).then_some(env.action.as_str());
     app.contexts.take()?;
@@ -200,7 +221,7 @@ async fn rp_context(
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs();
-    let s = rp::sign(&app.rp_key, random, now, RP_TTL, action).map_err(|_| {
+    let s = rp::sign(&signer.key, random, now, RP_TTL, action).map_err(|_| {
         Refusal::new(
             StatusCode::INTERNAL_SERVER_ERROR,
             "internal",
@@ -212,10 +233,10 @@ async fn rp_context(
         action.map_or_else(|| "session".to_string(), |a| format!("{a} (first binding)"))
     );
     Ok(Json(json!({
-        "app_id": app.app_id,
+        "app_id": signer.app_id,
         "action": action,
         "rp_context": {
-            "rp_id": app.rp_id,
+            "rp_id": signer.rp_id,
             "nonce": s.nonce,
             "created_at": s.created_at,
             "expires_at": s.expires_at,
@@ -228,6 +249,7 @@ async fn health(State(app): State<Arc<App>>) -> Json<Value> {
     Json(json!({
         "ok": true,
         "chainId": CHAIN_ID,
+        "signs": app.signer.is_some(),
         "KnockBinding": {"staging": app.staging.binding, "production": app.production.binding},
         "action": {"staging": app.staging.action, "production": app.production.action},
     }))
@@ -237,8 +259,8 @@ fn var(name: &str) -> anyhow::Result<String> {
     std::env::var(name).with_context(|| format!("{name} is not set (.env)"))
 }
 
-fn envs() -> anyhow::Result<(Env, Env)> {
-    let d: Value = serde_json::from_str(DEPLOYMENTS)?;
+fn envs(deployments: &str) -> anyhow::Result<(Env, Env)> {
+    let d: Value = serde_json::from_str(deployments).context("deployments: not JSON")?;
     ensure!(
         d["chainId"] == CHAIN_ID,
         "deployments: not chain {CHAIN_ID}"
@@ -282,9 +304,9 @@ fn rp_number(rp_id: &str) -> anyhow::Result<u64> {
     u64::from_str_radix(hex, 16).context("WORLD_RP_ID: rp_ and 16 hex digits")
 }
 
-/// Before serving: each KnockBinding is v3, proves the action the deployments say, and carries our RP and its
-/// environment's verifier, and World's registry in each environment has our RP key as Knock's signer (else World
-/// ID would turn down every request we sign).
+/// Before serving: each KnockBinding is v3, proves the action the deployments say, and answers to its environment's
+/// verifier; and, for a knockd that signs, carries our RP, and World's registry in each environment has our RP key
+/// as its signer (else World ID would turn down every request we sign).
 async fn check(app: &App) -> anyhow::Result<()> {
     ensure!(
         app.chain
@@ -325,16 +347,6 @@ async fn check(app: &App) -> anyhow::Result<()> {
             env.name,
             env.action
         );
-        let rp = kb
-            .RP_ID()
-            .call()
-            .await
-            .map_err(|e| anyhow::anyhow!(app.redact(e)))?;
-        ensure!(
-            rp == app.rp,
-            "{}: KnockBinding carries another RP than WORLD_RP_ID",
-            env.name
-        );
         let world = kb
             .WORLD_ID()
             .call()
@@ -345,13 +357,26 @@ async fn check(app: &App) -> anyhow::Result<()> {
             "{}: KnockBinding answers to another verifier",
             env.name
         );
-        let signer = RpRegistry::new(env.registry, &app.chain)
-            .getOprfKeyIdAndSigner(app.rp)
+        let Some(signer) = &app.signer else {
+            continue;
+        };
+        let rp = kb
+            .RP_ID()
+            .call()
+            .await
+            .map_err(|e| anyhow::anyhow!(app.redact(e)))?;
+        ensure!(
+            rp == signer.rp,
+            "{}: KnockBinding carries another RP than WORLD_RP_ID",
+            env.name
+        );
+        let registered = RpRegistry::new(env.registry, &app.chain)
+            .getOprfKeyIdAndSigner(signer.rp)
             .call()
             .await
             .map_err(|e| anyhow::anyhow!(app.redact(e)))?
             ._1;
-        if signer != app.rp_key.address() {
+        if registered != signer.key.address() {
             bail!(
                 "{}: World's RP registry has another signer for this RP than the RP key file's key",
                 env.name
@@ -375,29 +400,52 @@ async fn main() -> anyhow::Result<()> {
             }
         );
     }
-    let key_file =
-        std::env::var("WORLD_RP_KEY_FILE").unwrap_or_else(|_| "knock-worldchain-key.json".into());
-    let key: Value = serde_json::from_str(
-        &std::fs::read_to_string(&key_file).with_context(|| format!("reading {key_file}"))?,
-    )
-    .with_context(|| format!("{key_file}: not JSON"))?;
-    let rp_key: PrivateKeySigner = key["privateKey"]
-        .as_str()
-        .context("the RP key file has no privateKey")?
-        .parse()
-        .map_err(|_| anyhow::anyhow!("the RP key file's privateKey isn't a key"))?;
+    // The RP key: a knockd without one signs no World ID requests. WORLD_RP_KEY_FILE=none says so; a file named
+    // and missing is an error; the default file missing means this knockd doesn't sign.
+    let named = std::env::var("WORLD_RP_KEY_FILE").ok();
+    let key_file = named
+        .clone()
+        .unwrap_or_else(|| "knock-worldchain-key.json".into());
+    let unsigned = |why: &str| {
+        tracing::warn!("{why}: this knockd signs no World ID requests; it relays and looks up");
+        None
+    };
+    let signer = match key_file.trim() {
+        "" | "none" => unsigned("WORLD_RP_KEY_FILE=none"),
+        _ => match std::fs::read_to_string(&key_file) {
+            Ok(text) => {
+                let key: Value =
+                    serde_json::from_str(&text).with_context(|| format!("{key_file}: not JSON"))?;
+                let rp_id = var("WORLD_RP_ID")?;
+                Some(Signer {
+                    key: key["privateKey"]
+                        .as_str()
+                        .context("the RP key file has no privateKey")?
+                        .parse()
+                        .map_err(|_| anyhow::anyhow!("the RP key file's privateKey isn't a key"))?,
+                    app_id: var("WORLD_APP_ID")?,
+                    rp: rp_number(&rp_id)?,
+                    rp_id,
+                })
+            }
+            Err(e) if named.is_none() && e.kind() == std::io::ErrorKind::NotFound => {
+                unsigned(&format!("no RP key file ({key_file})"))
+            }
+            Err(e) => return Err(e).with_context(|| format!("reading {key_file}")),
+        },
+    };
     let gas: PrivateKeySigner = var("RELAYER_WALLET_PRIV_KEY")?
         .parse()
         .map_err(|_| anyhow::anyhow!("RELAYER_WALLET_PRIV_KEY isn't a key"))?;
     let rpc = var("WORLD_RPC")?;
-    let rp_id = var("WORLD_RP_ID")?;
-    let (staging, production) = envs()?;
+    let deployments = match std::env::var("KNOCK_DEPLOYMENTS") {
+        Ok(path) => std::fs::read_to_string(&path).with_context(|| format!("reading {path}"))?,
+        Err(_) => DEPLOYMENTS.to_string(),
+    };
+    let (staging, production) = envs(&deployments)?;
     let index = bindings::Index::new(staging.block.min(production.block));
     let app = App {
-        rp: rp_number(&rp_id)?,
-        rp_id,
-        app_id: var("WORLD_APP_ID")?,
-        rp_key,
+        signer,
         gas: gas.address(),
         chain: ProviderBuilder::new()
             .wallet(EthereumWallet::from(gas))
@@ -419,7 +467,12 @@ async fn main() -> anyhow::Result<()> {
     if std::env::var("KNOCKD_SKIP_CHECKS").is_err() {
         check(&app).await?;
         tracing::info!(
-            "checked on World Chain: both KnockBindings are v3 with the deployments' actions and our RP, and World knows our RP key"
+            "checked on World Chain: both KnockBindings are v3 with the deployments' actions{}",
+            if app.signer.is_some() {
+                " and our RP, and World knows our RP key"
+            } else {
+                "; no RP key, so no World ID requests signed here"
+            }
         );
     }
 
@@ -437,14 +490,21 @@ async fn main() -> anyhow::Result<()> {
         }
     });
 
+    // The Consoles that may call it from a browser, or "*" for any: a knockd anyone's Console can use
     let origins = std::env::var("KNOCKD_ORIGINS")
         .unwrap_or_else(|_| "http://localhost:3000,http://127.0.0.1:3000".into());
-    let origins: Vec<HeaderValue> = origins
-        .split(',')
-        .map(|o| o.trim().parse())
-        .collect::<Result<_, _>>()?;
+    let allow = if origins.trim() == "*" {
+        AllowOrigin::any()
+    } else {
+        AllowOrigin::list(
+            origins
+                .split(',')
+                .map(|o| o.trim().parse())
+                .collect::<Result<Vec<HeaderValue>, _>>()?,
+        )
+    };
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::list(origins))
+        .allow_origin(allow)
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([header::CONTENT_TYPE]);
     let router = Router::new()

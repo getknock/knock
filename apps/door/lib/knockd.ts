@@ -2,7 +2,10 @@
 import type { Hex } from 'viem'
 import type { Environment } from './deployments'
 
+/** The knockd this Console relays bindings through and looks them up with: anyone can run one (D34) */
 export const KNOCKD = process.env.NEXT_PUBLIC_KNOCKD ?? 'http://127.0.0.1:8787'
+/** The knockd that signs World ID requests: the one holding the network's RP key, KNOCKD unless said otherwise */
+export const KNOCKD_RP = process.env.NEXT_PUBLIC_KNOCKD_RP ?? KNOCKD
 
 /** knockd's no, as it says it: {error, why}. */
 export class Refused extends Error {
@@ -14,16 +17,16 @@ export class Refused extends Error {
   }
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, to = KNOCKD): Promise<T> {
   let r: Response
   try {
-    r = await fetch(KNOCKD + path, {
+    r = await fetch(to + path, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),
     })
   } catch {
-    throw new Refused('offline', `knockd isn't answering at ${KNOCKD}: start it with cargo run -p knockd`)
+    throw new Refused('offline', `knockd isn't answering at ${to}: start it with cargo run -p knockd`)
   }
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Refused(j.error ?? 'error', j.why ?? `knockd answered ${r.status}`)
@@ -37,10 +40,11 @@ export type RpContext = { rp_id: string; nonce: string; created_at: number; expi
  * proof for the deployment's action (D24); for a binding by their session, a session proof, which names no action.
  */
 export function rpContext(env: Environment, session: boolean) {
-  return post<{ app_id: `app_${string}`; action: string | null; rp_context: RpContext }>('/rp-context', {
-    environment: env,
-    session,
-  })
+  return post<{ app_id: `app_${string}`; action: string | null; rp_context: RpContext }>(
+    '/rp-context',
+    { environment: env, session },
+    KNOCKD_RP,
+  )
 }
 
 /** World ID's id for a session: `session_`, then its commitment and oprf seed in hex. */
