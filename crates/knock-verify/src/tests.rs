@@ -9,6 +9,9 @@ use serde_json::{Value, json};
 
 use super::*;
 
+/// The repo's deployments: what KNOCK_BINDING must match
+const DEPLOYMENTS: &str = include_str!("../../../contracts/deployments/480.json");
+
 const V: &str = include_str!("../../../spec/vectors/v1.json");
 const NOW: u64 = 1_794_979_500;
 const HEAD: u64 = 23_900_000;
@@ -64,7 +67,7 @@ fn receipt() -> Receipt {
     Receipt {
         ok: true,
         block: 37_300_000,
-        logs: vec![bound(accepted_binding().unwrap(), namehash(&name()))],
+        logs: vec![bound(accepted_binding(), namehash(&name()))],
     }
 }
 
@@ -123,7 +126,7 @@ fn verifier() -> Verifier<Fake> {
         chain,
         Store::open(":memory:").unwrap(),
         origin(),
-        accepted_binding().unwrap(),
+        accepted_binding(),
         365 * 86_400,
     );
     v.store.give(challenge(), &origin(), NOW - 10);
@@ -204,7 +207,7 @@ fn the_digest_and_key_are_the_vectors() {
 fn the_accepted_binding_is_v3_production() {
     let d: Value = serde_json::from_str(DEPLOYMENTS).unwrap();
     let at = |v: &Value| v.as_str().unwrap().parse::<Address>().unwrap();
-    let accepted = accepted_binding().unwrap();
+    let accepted = accepted_binding();
     assert_eq!(d["production"]["version"], 3);
     assert_eq!(accepted, at(&d["production"]["KnockBinding"]));
     assert_ne!(
@@ -403,7 +406,7 @@ async fn the_binding_is_for_this_key_human_and_name_young_and_final_for_a_strict
         (
             Some(Receipt {
                 logs: vec![bound(
-                    accepted_binding().unwrap(),
+                    accepted_binding(),
                     namehash("spare.itzraj.eth"),
                 )],
                 ..receipt()

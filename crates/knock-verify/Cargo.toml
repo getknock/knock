@@ -1,9 +1,14 @@
 [package]
 name = "knock-verify"
 version = "0.1.0"
-edition = "2024"
-publish = false
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage = "https://docs.getknock.dev/reference/knock-verify"
 description = "A site's check of a knock (V1–V8): ENS for the name, World Chain for the human, the Wedgie's signature for the press, SQLite for what's been used"
+readme = "README.md"
+keywords = ["knock", "world-id", "ens", "proof-of-human", "p256"]
+categories = ["authentication", "cryptography"]
 
 [dependencies]
 alloy = { version = "2.5.0", default-features = false, features = ["std", "sol-types", "eip712", "serde", "ens"] }

@@ -42,7 +42,6 @@ pub const RECORDS: [&str; 5] = [
 const HALF_N: U256 = U256::from_be_bytes(alloy::primitives::hex!(
     "7FFFFFFF800000007FFFFFFFFFFFFFFFDE737D56D38BCF4279DCE5617E3192A8"
 ));
-const DEPLOYMENTS: &str = include_str!("../../../contracts/deployments/480.json");
 
 sol! {
     /// What a Wedgie signs for a knock (EIP-712, domain Knock v1).
@@ -60,18 +59,14 @@ sol! {
     event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, bytes32 indexed node, uint64 expiresAtMin);
 }
 
-/// The KnockBinding whose `Bound` logs count: v3, production (D22, D24). Staging's takes Simulator proofs, a v1
+/// The KnockBinding whose `Bound` logs count: v3, production, on World Chain (D22, D24), as the repo's
+/// `contracts/deployments/480.json` has it (a test holds the two together). Staging's takes Simulator proofs, a v1
 /// binding names no name, and v2's are retired with it, so none of those counts.
-pub fn accepted_binding() -> Result<Address, String> {
-    let d: Value = serde_json::from_str(DEPLOYMENTS).map_err(|e| e.to_string())?;
-    if d["chainId"] != WORLD_CHAIN || d["production"]["version"] != 3 {
-        return Err("deployments: no KnockBinding v3 on World Chain".into());
-    }
-    d["production"]["KnockBinding"]
-        .as_str()
-        .and_then(|a| a.parse::<Address>().ok())
-        .filter(|a| !a.is_zero())
-        .ok_or_else(|| "deployments: no production KnockBinding".into())
+pub const KNOCK_BINDING: Address = alloy::primitives::address!("7748D2787DcB6E6024968edC19fcA13ccAbA1699");
+
+/// [`KNOCK_BINDING`], the one KnockBinding a knock's binding can be in unless a site names its own network's.
+pub fn accepted_binding() -> Address {
+    KNOCK_BINDING
 }
 
 /// A no, with the check that said it (1–8; 0 for the verifier's own trouble) and a code a site can act on.
