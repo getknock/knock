@@ -1,17 +1,17 @@
 {
   "chainId": 480,
   "production": {
-    "KnockBinding": "0x0000000000000000000000000000000000000000",
+    "KnockBinding": "0x7748D2787DcB6E6024968edC19fcA13ccAbA1699",
     "WorldIDVerifier": "0x00000000009E00F9FE82CfeeBB4556686da094d7",
-    "block": 0,
+    "block": 37301479,
     "RpRegistry": "0xD9A213A92Bca460D56cDbBF4d775b48fB5925BbC",
     "version": 3,
     "action": "knock-human"
   },
   "staging": {
-    "KnockBinding": "0x0000000000000000000000000000000000000000",
+    "KnockBinding": "0x5248D9EE577311D8f0e87bF3Ca2EE990a7ce46E7",
     "WorldIDVerifier": "0x703a6316c975DEabF30b637c155edD53e24657DB",
-    "block": 0,
+    "block": 37301468,
     "RpRegistry": "0x37d2462fE7B4a07987263AAd062C6593C4f567b9",
     "version": 3,
     "action": "knock-human"
