@@ -1,5 +1,6 @@
-/* Knock's colors are its icon's: the page is the violet label, the Wedgie its black frame, and the yellow door
-   is the one thing to do now. Green and red are the Wedgie's own buttons, and mean only them. */
+/* The Console and the Door wear the docs' clothes: light paper, Knock's violet label across the top, the Wedgie's
+   black frame, and the yellow door for the one thing to do now (the step you're on, its button, and focus). Green
+   and red are the Wedgie's own buttons, and mean only them; the kill switch is the one other red thing. */
 :root {
   --violet: #6e56cf;
   --deep: #4b3a99;
@@ -9,6 +10,32 @@
   --soft: #d9d1f7;
   --go: #3fbf5f;
   --stop: #e5484d;
+
+  --paper: #fbfaff;
+  --ink: #1a1b1a;
+  --muted: #5d5872;
+  --line: #e4e0f2;
+  --tint: #f1eefc;
+  --link: #5a43c2;
+  --code-bg: #ece8fb;
+  /* The hard shadow under things you press, as under the Wedgie */
+  --drop: #1a1b1a;
+  --top: 3.75rem;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #141316;
+    --ink: #f2effa;
+    --muted: #a7a1b9;
+    --line: #2c2934;
+    --tint: #1e1b26;
+    --link: #b9a9ff;
+    --code-bg: #262231;
+    --drop: #000;
+    color-scheme: dark;
+  }
 }
 
 * {
@@ -16,8 +43,8 @@
 }
 
 html {
-  background: var(--violet);
-  color: var(--white);
+  background: var(--paper);
+  color: var(--ink);
   font-family: var(--sans), system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
@@ -26,100 +53,173 @@ body {
   margin: 0;
   min-height: 100vh;
   font-size: 1.0625rem;
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 code,
 .hex {
   font-family: var(--mono), ui-monospace, monospace;
-  font-size: 0.9375em;
+  font-size: 0.9em;
+}
+
+p code,
+dd code,
+li code {
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 5px;
+  background: var(--code-bg);
 }
 
 a {
-  color: inherit;
+  color: var(--link);
   text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+}
+
+a:hover {
+  text-decoration-thickness: 2px;
 }
 
 :focus-visible {
   outline: 3px solid var(--door);
-  outline-offset: 3px;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-.bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-  padding: 1rem clamp(1rem, 4vw, 3rem);
+img {
+  image-rendering: pixelated;
 }
 
-.bar img {
-  width: 36px;
-  height: 36px;
-}
-
-.bar h1 {
-  margin: 0;
-  font-size: 1.25rem;
-  font-weight: 800;
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
   white-space: nowrap;
 }
 
-.status {
-  margin: 0 0 0 auto;
+.muted {
+  color: var(--muted);
+}
+
+.small {
+  font-size: 0.875rem;
+}
+
+/* The bar: Knock's violet label, across the top */
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 20;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1rem;
+  height: var(--top);
+  padding: 0 clamp(1rem, 3vw, 2rem);
+  background: var(--violet);
+  color: var(--white);
+  box-shadow: 0 3px 0 var(--deep);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  color: var(--white);
+  font-family: var(--pixel), monospace;
+  font-size: 1.375rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.brand img {
+  border-radius: 6px;
+  box-shadow: 0 0 0 2px var(--deep);
+}
+
+.links {
+  display: flex;
+  gap: 1.25rem;
+  margin-left: auto;
   font-size: 0.9375rem;
-  white-space: nowrap;
 }
 
-.dot {
-  width: 0.625rem;
-  height: 0.625rem;
-  border-radius: 50%;
-  background: var(--soft);
+.links a {
+  color: var(--white);
+  text-decoration: none;
 }
 
-.dot.ready {
-  background: var(--go);
+.links a:hover {
+  text-decoration: underline;
 }
 
-.dot.down {
-  background: var(--stop);
-}
-
+/* The page */
 .console {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 2.5rem clamp(1rem, 3vw, 2rem) 6rem;
+}
+
+.page-head h1 {
+  margin: 0 0 0.75rem;
+  font-family: var(--pixel), monospace;
+  font-size: clamp(2.125rem, 4.5vw, 2.875rem);
+  font-weight: 600;
+  line-height: 1.05;
+}
+
+.page-head .lede {
+  max-width: 40rem;
+  margin: 0;
+  color: var(--muted);
+  font-size: 1.1875rem;
+  line-height: 1.5;
+}
+
+.layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 2.5rem;
-  max-width: 1100px;
-  margin: 0 auto;
-  padding: 1rem clamp(1rem, 4vw, 3rem) 4rem;
+  margin-top: 2.5rem;
 }
 
-@media (min-width: 880px) {
-  .console {
-    grid-template-columns: 340px minmax(0, 1fr);
-    gap: 4rem;
+@media (min-width: 60rem) {
+  .layout {
+    grid-template-columns: 19rem minmax(0, 1fr);
+    gap: clamp(2.5rem, 5vw, 4.5rem);
     align-items: start;
   }
 
-  /* The Wedgie stays in view down the page: naming it and killing it ask for presses too. */
-  .console > section:first-child {
+  /* The Wedgie stays in view down the page: binding and naming ask for presses on it */
+  .device-panel {
     position: sticky;
-    top: 1rem;
+    top: calc(var(--top) + 1.5rem);
   }
 }
 
-/* The Wedgie, drawn as a thing you hold: its screen mirrors the real one, its buttons light up on your turn. */
+.device-panel {
+  display: grid;
+  justify-items: center;
+  gap: 1.25rem;
+}
+
+/* The Wedgie, drawn as a thing you hold: its screen mirrors the real one, its buttons light up on your turn */
 .wedgie {
-  width: min(100%, 340px);
-  margin: 0 auto;
-  padding: 22px 22px 26px;
-  border-radius: 26px 26px 44px 44px;
+  width: min(100%, 19rem);
+  padding: 18px 18px 22px;
+  border-radius: 24px 24px 40px 40px;
   background: var(--frame);
-  box-shadow: 0 8px 0 #000;
+  box-shadow: 0 6px 0 #000;
+}
+
+@media (prefers-color-scheme: dark) {
+  /* On a dark page the frame needs an edge to stand on */
+  .wedgie {
+    box-shadow:
+      0 0 0 1px #2e2c33,
+      0 6px 0 #000;
+  }
 }
 
 .wedgie canvas {
@@ -134,22 +234,24 @@ a {
 .buttons {
   display: flex;
   justify-content: center;
-  gap: 3.5rem;
-  margin-top: 22px;
+  gap: 3.25rem;
+  margin-top: 18px;
 }
 
 .button {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
   border-radius: 50%;
 }
 
 .button.go {
   background: var(--go);
+  box-shadow: 0 4px 0 #1f7a3a;
 }
 
 .button.stop {
   background: var(--stop);
+  box-shadow: 0 4px 0 #8f2226;
 }
 
 .button.now {
@@ -158,206 +260,540 @@ a {
 
 @keyframes press {
   50% {
-    transform: scale(0.86);
-    box-shadow: 0 0 0 7px #3fbf5f59;
+    transform: translateY(3px);
+    box-shadow:
+      0 1px 0 #1f7a3a,
+      0 0 0 7px #3fbf5f59;
   }
 }
 
 .facts {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  gap: 0.25rem 1rem;
-  width: min(100%, 340px);
-  margin: 1.5rem auto 0;
+  gap: 0;
+  width: min(100%, 19rem);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
   font-size: 0.9375rem;
 }
 
+.facts dt,
+.facts dd {
+  margin: 0;
+  padding: 0.4375rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
 .facts dt {
+  background: var(--tint);
   font-weight: 700;
 }
 
 .facts dd {
-  margin: 0;
   overflow-wrap: anywhere;
 }
 
-.side-actions {
-  display: flex;
-  justify-content: center;
-  margin-top: 1.25rem;
+.facts dt:nth-last-of-type(1),
+.facts dd:last-child {
+  border-bottom: 0;
 }
 
-h2 {
-  margin: 0 0 0.75rem;
-  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
-  font-weight: 800;
-  line-height: 1.1;
+/* Buttons you press, as on the Wedgie: a hard shadow that goes when you push */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1.125rem;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  box-shadow: 0 4px 0 var(--drop);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 700;
+  line-height: 1.25;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    transform 80ms,
+    box-shadow 80ms;
 }
 
-.lede {
-  max-width: 34em;
-  margin: 0 0 1.75rem;
+.btn:hover:not(:disabled) {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 var(--drop);
 }
 
-.where {
-  display: grid;
-  gap: 0.75rem;
-  margin: 0 0 2rem;
+.btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: none;
+}
+
+.btn.go {
+  border-color: var(--frame);
+  background: var(--door);
+  box-shadow: 0 4px 0 var(--frame);
+  color: var(--frame);
+}
+
+.btn.go:hover:not(:disabled) {
+  box-shadow: 0 2px 0 var(--frame);
+}
+
+.btn.stop {
+  border-color: var(--frame);
+  background: var(--stop);
+  box-shadow: 0 4px 0 var(--frame);
+  color: var(--white);
+}
+
+.btn.small {
+  padding: 0.375rem 0.875rem;
+  font-size: 0.9375rem;
+  box-shadow: 0 3px 0 var(--drop);
+}
+
+.btn.quiet {
+  border-color: var(--line);
+  box-shadow: 0 3px 0 var(--line);
+  color: var(--muted);
+}
+
+.btn:disabled {
+  border-color: var(--line);
+  background: var(--tint);
+  box-shadow: none;
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.btn img {
+  image-rendering: auto;
+}
+
+.text-btn {
   padding: 0;
   border: 0;
-}
-
-@media (min-width: 560px) {
-  .where {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.where legend {
-  margin-bottom: 0.625rem;
-  padding: 0;
-  font-weight: 700;
-}
-
-.where label {
-  display: block;
-  padding: 0.875rem 1rem;
-  border: 2px solid transparent;
-  border-radius: 14px;
-  background: var(--deep);
+  background: none;
+  color: var(--link);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
   cursor: pointer;
 }
 
-.where label:has(input:checked) {
-  border-color: var(--door);
+.text-btn:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
 }
 
-.where label:has(input:disabled) {
-  cursor: default;
-}
-
-.where input {
-  margin: 0 0.5rem 0 0;
-  accent-color: var(--door);
-}
-
-.where small {
-  display: block;
-  margin-top: 0.25rem;
-  color: var(--soft);
-  font-size: 0.875rem;
-}
-
-/* Who's binding: a returning human's session, or a first binding */
-.who {
-  display: grid;
-  gap: 0.75rem;
-  justify-items: start;
-  margin: 0 0 2rem;
-  padding: 0.875rem 1rem;
-  border-radius: 14px;
-  background: var(--deep);
-}
-
-.who p {
-  margin: 0;
-  font-size: 0.9375rem;
-}
-
-.find {
+.actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  width: 100%;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  margin-top: 1.25rem;
 }
 
-.find input {
-  flex: 1 1 14rem;
-  min-width: 0;
-  padding: 0.55rem 0.8rem;
-  border: 2px solid transparent;
-  border-radius: 10px;
+.actions .note {
+  margin: 0;
+}
+
+/* Ready: the one moment the page celebrates */
+.ready {
+  position: relative;
+  margin: 0 0 2.5rem;
+  padding: 1.375rem 1.5rem 1.5rem;
+  border-radius: 18px;
   background: var(--violet);
+  box-shadow: 0 6px 0 var(--deep);
   color: var(--white);
-  font: inherit;
-  font-family: var(--mono), ui-monospace, monospace;
-  font-size: 0.875rem;
 }
 
-.find input::placeholder {
-  color: #d9d1f799;
+.ready-title {
+  margin: 0 0 0.375rem;
+  font-family: var(--pixel), monospace;
+  font-size: clamp(1.5rem, 3vw, 1.875rem);
+  font-weight: 600;
+  line-height: 1.15;
+  overflow-wrap: anywhere;
 }
 
-.find input:focus-visible {
-  outline: none;
-  border-color: var(--door);
+.ready p {
+  margin: 0;
 }
 
+.ready .btn {
+  margin-top: 1rem;
+}
+
+/* The steps, on a rail: numbered because they happen in this order */
 .steps {
-  margin: 0 0 2rem;
+  position: relative;
+  margin: 0;
   padding: 0;
   list-style: none;
-  counter-reset: step;
 }
 
-.steps li {
+.step {
+  position: relative;
   display: grid;
   grid-template-columns: 2.25rem minmax(0, 1fr);
-  gap: 0.875rem;
-  padding: 0.875rem 0;
-  border-top: 1px solid #fefefe33;
-  counter-increment: step;
+  gap: 0 1.125rem;
+  padding-bottom: 1.75rem;
 }
 
-.steps li::before {
-  content: counter(step);
+/* The rail between one step's mark and the next */
+.step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  top: 2.5rem;
+  bottom: 0.25rem;
+  left: calc(1.125rem - 1px);
+  width: 2px;
+  background: var(--line);
+}
+
+.step.done:not(:last-child)::before {
+  background: var(--violet);
+}
+
+.mark {
   display: grid;
   place-items: center;
   width: 2.25rem;
   height: 2.25rem;
+  border: 2px solid var(--line);
   border-radius: 50%;
-  background: var(--deep);
+  background: var(--paper);
+  color: var(--muted);
+  font-family: var(--pixel), monospace;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.step.done .mark {
+  border-color: var(--violet);
+  background: var(--violet);
+  color: var(--white);
+  font-family: var(--sans), sans-serif;
+  font-size: 1rem;
   font-weight: 800;
 }
 
-.steps li.now::before {
+.step.now .mark {
+  border-color: var(--frame);
+  background: var(--door);
+  box-shadow: 0 3px 0 var(--frame);
+  color: var(--frame);
+}
+
+.step h2 {
+  margin: 0.3125rem 0 0;
+  font-size: 1.25rem;
+  line-height: 1.3;
+}
+
+.step.later h2 {
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.did {
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.9688rem;
+  overflow-wrap: anywhere;
+}
+
+.did strong {
+  color: var(--ink);
+}
+
+.body {
+  margin-top: 0.875rem;
+  padding: 1.25rem 1.375rem 1.375rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--tint);
+}
+
+.body > :first-child {
+  margin-top: 0;
+}
+
+.body p {
+  margin: 0 0 0.875rem;
+}
+
+.body > p:first-child {
+  max-width: 40rem;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+.hint {
+  margin: 0.5rem 0 1rem;
+  color: var(--muted);
+  font-size: 0.9375rem;
+}
+
+/* Callouts, as the docs' alerts */
+.callout {
+  margin: 1rem 0;
+  padding: 0.75rem 1rem;
+  border-left: 4px solid var(--violet);
+  border-radius: 0 10px 10px 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.9688rem;
+}
+
+.callout > :last-child,
+.callout p:last-child {
+  margin-bottom: 0;
+}
+
+.callout p {
+  margin: 0 0 0.5rem;
+}
+
+.callout.warn {
+  border-left-color: var(--door);
+}
+
+.callout.bad {
+  border-left-color: var(--stop);
+}
+
+.callout-title {
+  font-weight: 700;
+}
+
+.callout .actions {
+  margin-top: 0.75rem;
+}
+
+/* Fields */
+input:not([type]),
+input[type='text'] {
+  min-width: 0;
+  padding: 0.625rem 0.8125rem;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+input::placeholder {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+input:focus-visible {
+  outline: none;
+  border-color: var(--violet);
+  box-shadow: 0 0 0 3px var(--door);
+}
+
+input:disabled {
+  color: var(--muted);
+}
+
+.name-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  max-width: 34rem;
+}
+
+.name-row input {
+  flex: 1 1 0;
+  font-family: var(--mono), ui-monospace, monospace;
+}
+
+.name-row span {
+  font-weight: 800;
+  font-size: 1.25rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.375rem;
+  max-width: 28rem;
+  margin: 0 0 1rem;
+}
+
+.field span {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.field input {
+  font-family: var(--mono), ui-monospace, monospace;
+}
+
+.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0;
+  font-weight: 700;
+}
+
+.check input {
+  width: 1.125rem;
+  height: 1.125rem;
+  accent-color: var(--violet);
+}
+
+.wallet {
+  display: flex;
+  gap: 0.625rem;
+  align-items: baseline;
+  margin: 1rem 0 0;
+  font-size: 0.9688rem;
+}
+
+div.wallet {
+  display: block;
+}
+
+.dot {
+  flex: none;
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.dot.on {
+  background: var(--go);
+}
+
+.who {
+  margin: 0 0 1rem;
+}
+
+.who > p {
+  margin: 0 0 0.5rem;
+}
+
+details.find {
+  font-size: 0.9688rem;
+}
+
+details summary {
+  width: fit-content;
+  color: var(--link);
+  cursor: pointer;
+}
+
+details.find p {
+  margin: 0.5rem 0;
+}
+
+.find-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.find-row input {
+  flex: 1 1 16rem;
+  font-family: var(--mono), ui-monospace, monospace;
+  font-size: 0.9375rem;
+}
+
+/* What happens, in order, and where it's got to */
+.progress {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: part;
+  font-size: 0.9688rem;
+}
+
+.progress li {
+  position: relative;
+  padding-left: 2rem;
+  counter-increment: part;
+}
+
+.progress li::before {
+  content: counter(part);
+  position: absolute;
+  left: 0;
+  top: 0.0625rem;
+  display: grid;
+  place-items: center;
+  width: 1.375rem;
+  height: 1.375rem;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.progress li.later {
+  color: var(--muted);
+}
+
+.progress li.now {
+  font-weight: 700;
+}
+
+.progress li.now::before {
+  border-color: var(--frame);
   background: var(--door);
   color: var(--frame);
 }
 
-.steps li.done::before {
+.progress li.done::before {
   content: '✓';
-  background: var(--white);
-  color: var(--violet);
+  border-color: var(--violet);
+  background: var(--violet);
+  color: var(--white);
 }
 
-.steps li.failed::before {
+.progress li.failed::before {
   content: '✕';
+  border-color: var(--stop);
   background: var(--stop);
+  color: var(--white);
 }
 
-.steps strong {
+.progress .sub {
   display: block;
-  padding-top: 0.25rem;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.875rem;
 }
 
-.steps p {
-  margin: 0.25rem 0 0;
-  font-size: 0.9375rem;
-}
-
-.link {
+.link-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem 0.75rem;
   align-items: center;
-  margin-top: 0.625rem;
-  padding: 0.625rem 0.75rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.625rem;
   border-radius: 10px;
-  background: var(--deep);
+  background: var(--paper);
+  font-weight: 400;
 }
 
-.link code {
+.link-row code {
   flex: 1 1 14rem;
   min-width: 0;
   overflow: hidden;
@@ -366,107 +802,152 @@ h2 {
   text-overflow: ellipsis;
 }
 
-.actions {
+.sent {
+  margin: 0.5rem 0 0;
+  padding-left: 1.125rem;
+  font-size: 0.9375rem;
+}
+
+.testing {
+  margin: 0.5rem 0 0 3.375rem;
+  font-size: 0.9688rem;
+}
+
+.testing p {
+  max-width: 38rem;
+  margin: 0.25rem 0 0;
+}
+
+/* The kill switch: apart from the setup, and folded until it's wanted */
+details.kill {
+  margin-top: 3rem;
+  border: 2px solid var(--line);
+  border-left: 6px solid var(--stop);
+  border-radius: 14px;
+}
+
+details.kill summary {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  align-items: center;
+  gap: 0.25rem 0.75rem;
+  align-items: baseline;
+  width: auto;
+  padding: 1rem 1.25rem;
+  color: var(--ink);
 }
 
-.primary,
-.quiet {
-  font: inherit;
-  border-radius: 999px;
-  cursor: pointer;
+.kill-title {
+  font-size: 1.125rem;
+  font-weight: 700;
 }
 
-.primary {
-  padding: 0.8rem 1.5rem;
-  border: 0;
-  background: var(--door);
-  color: var(--frame);
-  font-weight: 800;
-  box-shadow: 0 4px 0 var(--frame);
+.kill-body {
+  padding: 0 1.25rem 1.375rem;
 }
 
-.primary:active:not(:disabled) {
-  transform: translateY(2px);
-  box-shadow: 0 2px 0 var(--frame);
-}
-
-.primary:disabled {
-  background: var(--deep);
-  color: var(--soft);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-.quiet {
-  padding: 0.55rem 1.1rem;
-  border: 2px solid #fefefe99;
-  background: transparent;
-  color: var(--white);
-}
-
-.quiet:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.problem {
-  margin: 0 0 1.5rem;
-  padding: 0.875rem 1rem;
-  border-left: 6px solid var(--stop);
-  border-radius: 10px;
-  background: var(--white);
-  color: var(--frame);
-}
-
-.bound {
-  margin-top: 1.5rem;
-  padding: 1.25rem 1.5rem;
-  border-radius: 18px;
-  background: var(--white);
-  color: var(--frame);
-}
-
-.bound h3 {
-  margin: 0 0 0.5rem;
-  font-size: 1.375rem;
-}
-
-.bound p {
-  margin: 0.375rem 0;
-}
-
-.bound .primary {
-  margin-top: 0.75rem;
-}
-
-.home {
-  display: grid;
-  place-items: start;
-  gap: 1.25rem;
+.kill-body > p {
   max-width: 40rem;
-  padding: 12vh clamp(1rem, 6vw, 4rem);
+  margin: 0 0 0.75rem;
 }
 
-.home img {
-  width: 96px;
-  height: 96px;
+.moved {
+  padding: 3rem clamp(1rem, 3vw, 2rem);
 }
 
-.home h1 {
+/* The Door: a small popup. The site's origin first and biggest, the Wedgie under it, then what to do. */
+.door-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding: 0 1rem;
+  background: var(--violet);
+  box-shadow: 0 3px 0 var(--deep);
+  color: var(--white);
+  font-family: var(--pixel), monospace;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.door-bar img {
+  border-radius: 5px;
+  box-shadow: 0 0 0 2px var(--deep);
+}
+
+.door-main {
+  display: grid;
+  gap: 1.125rem;
+  max-width: 380px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 1.5rem;
+}
+
+.door-title {
+  margin: 0.5rem 0 0;
+  font-family: var(--pixel), monospace;
+  font-size: 2rem;
+  font-weight: 600;
+}
+
+.door-main p {
   margin: 0;
-  font-size: clamp(2.5rem, 7vw, 4.5rem);
+}
+
+.asker {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--tint);
+  text-align: center;
+}
+
+.asker .origin {
+  font-family: var(--mono), ui-monospace, monospace;
+  font-size: 1.1875rem;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.door .wedgie {
+  justify-self: center;
+  width: min(100%, 236px);
+  padding: 14px 14px 18px;
+  border-radius: 20px 20px 34px 34px;
+}
+
+.door .buttons {
+  gap: 2.75rem;
+  margin-top: 14px;
+}
+
+.door .button {
+  width: 26px;
+  height: 26px;
+}
+
+.door-say {
+  display: grid;
+  gap: 0.375rem;
+  min-height: 3rem;
+  text-align: center;
+}
+
+.door-say .callout {
+  margin: 0;
+  text-align: left;
+}
+
+.knocked::before {
+  content: '✓ ';
+  color: var(--violet);
   font-weight: 800;
-  line-height: 1;
 }
 
-.home p {
-  max-width: 30em;
-  margin: 0;
-  font-size: 1.25rem;
+.door .actions {
+  justify-content: center;
+  margin-top: 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -476,176 +957,34 @@ h2 {
     outline-offset: 4px;
   }
 
-  .primary:active:not(:disabled) {
+  .btn,
+  .btn:hover:not(:disabled),
+  .btn:active:not(:disabled) {
+    transition: none;
     transform: none;
   }
 }
 
-a.primary {
-  display: inline-block;
-  text-decoration: none;
+@media (max-width: 34rem) {
+  .links {
+    gap: 1rem;
+  }
+
+  .body {
+    padding: 1rem 1rem 1.125rem;
+  }
+
+  .testing {
+    margin-left: 0;
+  }
 }
 
-/* Naming and the kill switch: parts of one setup, under the binding */
-.part + .part {
-  margin-top: 3.5rem;
-  padding-top: 2.5rem;
-  border-top: 1px solid #fefefe33;
+.page-head .lost {
+  max-width: 40rem;
+  margin: 0.75rem 0 0;
+  font-size: 0.9688rem;
 }
 
-.part h3 {
-  margin: 1.5rem 0 0.5rem;
-  font-size: 1.0625rem;
-}
-
-.part input {
-  min-width: 0;
-  padding: 0.65rem 0.85rem;
-  border: 2px solid transparent;
-  border-radius: 10px;
-  background: var(--deep);
-  color: var(--white);
-  font: inherit;
-}
-
-.part input::placeholder {
-  color: #d9d1f799;
-}
-
-.part input:focus-visible {
-  outline: none;
-  border-color: var(--door);
-}
-
-.part input.hex,
-.part .field input.hex {
-  font-family: var(--mono), ui-monospace, monospace;
-  flex: 1 1 18rem;
-}
-
-.name-row {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-}
-
-.name-row input {
-  flex: 1 1 0;
-}
-
-.name-row span {
-  font-weight: 800;
-  font-size: 1.25rem;
-}
-
-.hint {
-  margin: 0.5rem 0 1.25rem;
-  color: var(--soft);
-  font-size: 0.9375rem;
-}
-
-.field {
-  display: grid;
-  gap: 0.4rem;
-  margin: 0 0 1rem;
-}
-
-.field span {
-  font-weight: 700;
-}
-
-.wallet {
-  margin: 0 0 0.5rem;
-}
-
-.wallet .dot {
-  display: inline-block;
-  margin-right: 0.35rem;
-  vertical-align: middle;
-}
-
-.wallet .quiet img {
-  margin-right: 0.35rem;
-  vertical-align: -4px;
-}
-
-.sent {
-  margin: 0.5rem 0 0;
-  padding-left: 1.1rem;
-  font-size: 0.9375rem;
-}
-
-/* The kill switch is the one red thing on the page that isn't a Wedgie button */
-.danger h2 {
-  color: var(--white);
-}
-
-.danger .lede {
-  border-left: 6px solid var(--stop);
-  padding-left: 1rem;
-}
-
-.kill {
-  padding: 0.8rem 1.5rem;
-  border: 0;
-  border-radius: 999px;
-  background: var(--stop);
-  color: var(--white);
-  font: inherit;
-  font-weight: 800;
-  box-shadow: 0 4px 0 var(--frame);
-  cursor: pointer;
-}
-
-.kill:disabled {
-  background: var(--deep);
-  color: var(--soft);
-  box-shadow: none;
-  cursor: not-allowed;
-}
-
-/* The Door: a small popup. The site's origin first and biggest, the Wedgie under it, then what to do. */
-.door {
-  display: grid;
-  gap: 1rem;
-  max-width: 380px;
-  margin: 0 auto;
-  padding: 1rem 1.25rem 1.5rem;
-}
-
-.door-bar {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 800;
-}
-
-.door-bar img {
-  width: 24px;
-  height: 24px;
-}
-
-.asker {
-  text-align: center;
-}
-
-.asker .origin {
-  margin: 0 0 0.25rem;
-  font-family: var(--mono), ui-monospace, monospace;
-  font-size: 1.15rem;
-  font-weight: 700;
-  overflow-wrap: anywhere;
-}
-
-.door .wedgie {
-  width: min(100%, 260px);
-}
-
-.door-say {
-  min-height: 3rem;
-  text-align: center;
-}
-
-.door .actions {
-  justify-content: center;
+details.kill {
+  scroll-margin-top: calc(var(--top) + 1.5rem);
 }

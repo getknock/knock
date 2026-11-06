@@ -112,3 +112,13 @@ export type BindingOnChain = Omit<Bound, 'gasUsed'>
 export function boundTx(tx: Hex) {
   return post<BindingOnChain>('/bound', { tx })
 }
+
+/** A Wedgie's latest binding on an environment's KnockBinding, found by its key; null if it was never bound there. */
+export async function latestBinding(env: Environment, key: Hex): Promise<BindingOnChain | null> {
+  try {
+    return await post<BindingOnChain>('/binding', { environment: env, key })
+  } catch (e) {
+    if (e instanceof Refused && e.error === 'no_binding') return null
+    throw e
+  }
+}

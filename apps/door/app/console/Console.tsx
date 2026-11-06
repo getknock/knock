@@ -1,59 +1,58 @@
 'use client'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { deviceNode } from '@knock-dev/protocol'
 import type { Hex } from 'viem'
-import { bindWedgie, showQr } from '../../lib/bind'
-import { type Remembered, recall, remember } from '../../lib/bindings'
-import { ACTION, EXPLORER, type Environment } from '../../lib/deployments'
-import { type Device, meet, same } from '../../lib/device'
-import { nameProblem } from '../../lib/ens'
-import { forgetHuman, recallHuman, rememberHuman } from '../../lib/humans'
-import { type Human, KNOCKD, type SessionId, type Sent, human as findHuman } from '../../lib/knockd'
-import type { Connected } from '../../lib/wallet'
+import { forget, killedTx, recall, remember } from '../../lib/bindings'
+import type { Environment } from '../../lib/deployments'
+import { type Device, forgetOn, meet } from '../../lib/device'
+import { knockState, nameProblem } from '../../lib/ens'
+import { KNOCKD, type Sent as Bound, latestBinding } from '../../lib/knockd'
+import type { Sent } from '../../lib/name'
+import { type Known, setup } from '../../lib/setup'
+import { useSite } from '../../lib/sites'
+import { type Connected, PUBLIC } from '../../lib/wallet'
 import { Wedgie } from '../../lib/wedgie'
+import { Bar } from './Bar'
+import { BindStep } from './BindStep'
 import { KillSwitch } from './KillSwitch'
-import { NameField } from './NameField'
-import { Naming } from './Naming'
+import { NameStep } from './NameStep'
+import { Naming, SentList } from './Naming'
 import { Screen, type View, short } from './Screen'
+import { Step } from './Step'
+import { TxLink } from './TxLink'
 
-type Phase = 'idle' | 'context' | 'qr' | 'device' | 'chain' | 'done' | 'stopped'
-/** Who's binding, and how the Console knows (D24). */
-type Who = { human: Human; whence: string }
-const STEPS = ['context', 'qr', 'device', 'chain'] as const
+const say = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-function say(e: unknown): string {
-  return e instanceof Error ? e.message : String(e)
+function split(name: string): [string, string] {
+  const at = name.indexOf('.')
+  return [name.slice(0, at), name.slice(at + 1)]
 }
 
+/** The Knock Console, at getknock.dev: a Wedgie set up in four steps, each in the order its records need (D21). */
 export function Console() {
   const [supported, setSupported] = useState(true)
   const [wedgie, setWedgie] = useState<Wedgie | null>(null)
   const [device, setDevice] = useState<Device | null>(null)
+  const [meeting, setMeeting] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
   const [knockd, setKnockd] = useState<'checking' | 'ready' | 'down'>('checking')
-  const [env, setEnv] = useState<Environment>('staging')
-  const [phase, setPhase] = useState<Phase>('idle')
-  const [reached, setReached] = useState(-1)
-  const [link, setLink] = useState<string | null>(null)
-  const [qr, setQr] = useState<{ n: number; bits: string } | null>(null)
-  const [qrUp, setQrUp] = useState(true)
-  const [nullifier, setNullifier] = useState<Hex | null>(null)
-  const [bound, setBound] = useState<Sent | null>(null)
-  const [found, setFound] = useState<Who | null>(null)
-  const [foundByName, setFoundByName] = useState<Who | null>(null)
-  const [picked, setPicked] = useState<Who | null>(null)
-  const [asNew, setAsNew] = useState(false)
-  const [findBy, setFindBy] = useState('')
-  const [finding, setFinding] = useState(false)
-  const [justBound, setJustBound] = useState<Remembered | null>(null)
+  const [env, setEnv] = useState<Environment>('production')
   const [label, setLabel] = useState('')
   const [parent, setParent] = useState('')
+  const [chosen, setChosen] = useState<{ name: string; found: string } | null>(null)
   const [wallet, setWallet] = useState<Connected | null>(null)
-  const [override, setOverride] = useState<View | null>(null)
-  const [elsewhere, setElsewhere] = useState(false)
-  const [problem, setProblem] = useState<string | null>(null)
-  const [copied, setCopied] = useState(false)
-  const abort = useRef<AbortController | null>(null)
+  const [known, setKnown] = useState<Known>({ state: 'checking' })
+  const [lookAgain, setLookAgain] = useState(0)
+  const [named, setNamed] = useState<Sent[]>([])
+  const [view, setView] = useState<View | null>(null)
+  const [binding, setBinding] = useState(false)
+  const [naming, setNaming] = useState(false)
+  const [killing, setKilling] = useState(false)
+  const [inEns, setInEns] = useState<'live' | 'revoked' | 'gone' | null>(null)
+  const [forgetting, setForgetting] = useState(false)
+  const [forgetProblem, setForgetProblem] = useState<string | null>(null)
   const current = useRef<Wedgie | null>(null)
+  const lastKey = useRef<Hex | null>(null)
+  const club = useSite('club')
 
   const ping = useCallback(async () => {
     try {
@@ -78,11 +77,14 @@ export function Console() {
       setDevice(null)
     }
     setWedgie(w)
+    setMeeting(true)
     try {
       setDevice(await meet(w))
       setProblem(null)
     } catch (e) {
       setProblem(say(e))
+    } finally {
+      setMeeting(false)
     }
   }, [])
 
@@ -103,80 +105,6 @@ export function Console() {
     }
   }, [attach])
 
-  // The name: the one the Wedgie's last World App binding was for, else the one it shows, until the user types one
-  useEffect(() => {
-    if (!device || label || parent) return
-    const from = recall(device.key, 'production')?.name ?? device.name
-    const at = from?.indexOf('.') ?? -1
-    if (from && at > 0) {
-      setLabel(from.slice(0, at))
-      setParent(from.slice(at + 1))
-    }
-  }, [device, label, parent])
-
-  const name = `${label}.${parent}`
-  const nameOk = Boolean(label && parent && !nameProblem(label, parent))
-  const who = asNew ? null : (picked ?? found ?? foundByName)
-  const me = who?.human ?? null
-
-  // Another environment, another human
-  useEffect(() => {
-    setPicked(null)
-    setAsNew(false)
-  }, [env])
-
-  // Who's binding (D24), from KnockBinding, so any browser knows: the human the connected Wedgie was last bound to
-  // (its name killed or not), else the one this browser bound. A failed read leaves what was known.
-  const key = device?.key
-  useEffect(() => {
-    if (knockd !== 'ready') return
-    let gone = false
-    ;(async () => {
-      try {
-        const byKey = key ? await findHuman(env, { key }) : null
-        if (gone) return
-        if (byKey) return setFound({ human: byKey, whence: "this Wedgie's last human" })
-        const here = recallHuman(env)
-        const h = here ? await findHuman(env, { session: here.session }) : null
-        if (gone) return
-        if (h && here && same(h.nullifier, here.nullifier)) return setFound({ human: h, whence: 'who bound here before' })
-        if (here) forgetHuman(env) // another deployment's
-        setFound(null)
-      } catch {}
-    })()
-    return () => {
-      gone = true
-    }
-  }, [env, knockd, key])
-
-  // Else the human the name was last bound for: a new Wedgie under a name its human had before
-  useEffect(() => {
-    setFoundByName(null)
-    if (knockd !== 'ready' || found || !nameOk) return
-    let gone = false
-    const t = setTimeout(() => {
-      Promise.resolve()
-        .then(() => findHuman(env, { node: deviceNode(name) }))
-        .then((h) => !gone && setFoundByName(h ? { human: h, whence: `${name}'s last human` } : null))
-        .catch(() => {})
-    }, 600)
-    return () => {
-      gone = true
-      clearTimeout(t)
-    }
-  }, [env, knockd, found, nameOk, name])
-
-  // While the QR is up, ask the Wedgie now and then whether it still is: red, or two minutes, takes it down.
-  useEffect(() => {
-    if (phase !== 'qr' || !wedgie) return
-    const t = setInterval(async () => {
-      try {
-        setQrUp(Boolean((await wedgie.ask({ type: 'hello' })).knock_qr))
-      } catch {}
-    }, 4000)
-    return () => clearInterval(t)
-  }, [phase, wedgie])
-
   async function connect() {
     setProblem(null)
     try {
@@ -186,374 +114,384 @@ export function Console() {
     }
   }
 
+  const key = device?.key ?? null
+  const pohTx = device?.poh?.match(/^eip155:480:tx:(0x[0-9a-f]{64})$/i)?.[1] ?? null
+  const name = `${label}.${parent}`
+  const nameOk = Boolean(label && parent && !nameProblem(label, parent))
 
-  /** A returning human, found on chain by a name they bound (killed or not), their nullifier, or a session. */
-  async function findMe() {
-    const q = findBy.trim().toLowerCase()
-    setProblem(null)
-    setFinding(true)
+  // Another Wedgie, another name to choose
+  useEffect(() => {
+    if (key && lastKey.current && key !== lastKey.current) setChosen(null)
+    if (key) lastKey.current = key
+  }, [key])
+
+  // Its name: the one it has, else the one this browser bound it for, until the person types one
+  useEffect(() => {
+    if (!device || label || parent) return
+    const from = device.name ?? recall(device.key, 'production')?.name
+    if (from && from.indexOf('.') > 0) {
+      const [l, p] = split(from)
+      setLabel(l)
+      setParent(p)
+    }
+  }, [device, label, parent])
+
+  const { set, stale, live, boundFor, killed, steps } = setup({
+    device,
+    name,
+    nameOk,
+    chosen: chosen?.name ?? null,
+    known,
+    remembered: key ? recall(key, env)?.name ?? null : null,
+    killedTx: key ? killedTx(key, env) : null,
+    inEns,
+  })
+
+  // What ENS has on the name a set-up Wedgie shows: it can't tell when its name was killed while it was away
+  useEffect(() => {
+    setInEns(null)
+    if (!set || !device?.name) return
+    let gone = false
+    knockState(PUBLIC, device.name, device.key)
+      .then((s) => !gone && setInEns(s))
+      .catch(() => {}) // unread, it's taken at its word
+    return () => {
+      gone = true
+    }
+  }, [set, device?.name, device?.key])
+
+  // A Wedgie that's set up keeps its name: another one is the kill switch's business. Once killed, it's chosen again.
+  const wasSet = useRef(false)
+  useEffect(() => {
+    if (set && device?.name) {
+      const [l, p] = split(device.name)
+      setLabel(l)
+      setParent(p)
+      setChosen({ name: device.name, found: 'live in ENS' })
+    } else if (wasSet.current) setChosen(null)
+    wasSet.current = set
+  }, [set, device?.name])
+
+  // What World Chain has for this Wedgie: its latest binding, from knockd's index, in any browser
+  useEffect(() => {
+    if (!key) return setKnown({ state: 'checking' })
+    if (knockd !== 'ready')
+      return setKnown(knockd === 'down' ? { state: 'unknown', why: "knockd isn't answering" } : { state: 'checking' })
+    let gone = false
+    setKnown({ state: 'checking' })
+    latestBinding(env, key)
+      .then((on) => !gone && setKnown(on ? { state: 'bound', on, name: null } : { state: 'none' }))
+      .catch((e) => !gone && setKnown({ state: 'unknown', why: say(e) }))
+    return () => {
+      gone = true
+    }
+  }, [env, key, knockd, lookAgain])
+
+  function onBound(out: Bound) {
+    if (!device) return
+    remember(device.key, out.environment, { tx: out.tx, name })
+    setKnown({ state: 'bound', on: out, name })
+  }
+
+  function onNamed(d: Device, sent: Sent[]) {
+    setDevice(d)
+    setNamed(sent)
+  }
+
+  // A stale Wedgie forgets the name ENS no longer has for it, and its binding with it, as the kill switch does (D20)
+  async function forgetStale() {
+    if (!wedgie || !device) return
+    setForgetting(true)
+    setForgetProblem(null)
     try {
-      let by: { nullifier: Hex } | { session: SessionId } | { node: Hex }
-      if (/^session_[0-9a-f]{128}$/.test(q)) by = { session: q as SessionId }
-      else if (/^0x[0-9a-f]{64}$/.test(q)) by = { nullifier: q as Hex }
-      else {
-        try {
-          by = { node: deviceNode(q) }
-        } catch {
-          throw new Error(`${q} isn't a name, a nullifier (0x and 64 hex digits) or a session id.`)
-        }
-      }
-      const h = await findHuman(env, by)
-      if (!h) throw new Error(`Knock has no human on ${env} for ${q}: nothing was bound by it there.`)
-      rememberHuman(env, h)
-      setPicked({ human: h, whence: `found by ${q.length > 24 ? short(q as Hex) : q}` })
-      setAsNew(false)
-      setFindBy('')
+      await forgetOn(wedgie, device.name)
+      forget(device.key, 'production', (pohTx as Hex | null) ?? null)
+      setDevice(await meet(wedgie))
     } catch (e) {
-      setProblem(say(e))
+      setForgetProblem(say(e))
     } finally {
-      setFinding(false)
+      setForgetting(false)
     }
   }
 
-  function bindAsNew() {
-    forgetHuman(env)
-    setPicked(null)
-    setAsNew(true)
+  function takeName(n: string) {
+    const [l, p] = split(n)
+    setLabel(l)
+    setParent(p)
+    setChosen(null)
   }
 
-  async function start() {
-    if (!wedgie || !device || !nameOk) return
-    const ac = new AbortController()
-    abort.current = ac
-    setProblem(null)
-    setBound(null)
-    setLink(null)
-    setQr(null)
-    setQrUp(true)
-    setNullifier(null)
-    try {
-      const out = await bindWedgie(
-        wedgie,
-        env,
-        device.key,
-        name,
-        me,
-        (s) => {
-          setPhase(s.step)
-          setReached(STEPS.indexOf(s.step))
-          if (s.step === 'qr') {
-            setLink(s.link)
-            setQr(s.qr)
-          }
-          if (s.step === 'device') {
-            setQr(null)
-            setNullifier(s.nullifier)
-          }
-        },
-        ac.signal,
-      )
-      setBound(out)
-      remember(device.key, out.environment, { tx: out.tx, name })
-      const h = { nullifier: out.bound.nullifier, session: out.session }
-      rememberHuman(out.environment, h)
-      setPicked({ human: h, whence: 'just bound' })
-      setAsNew(false)
-      if (out.environment === 'production') setJustBound({ tx: out.tx, name })
-      setPhase('done')
-    } catch (e) {
-      setQr(null)
-      wedgie.ask({ type: 'knock_cancel' }).catch(() => {})
-      if (ac.signal.aborted) {
-        setPhase('idle')
-        setReached(-1)
-      } else {
-        setPhase('stopped')
-        setProblem(say(e))
-      }
-    }
-  }
-
-  async function showAgain() {
-    if (!wedgie || !qr) return
-    try {
-      await showQr(wedgie, qr)
-      setQrUp(true)
-    } catch (e) {
-      setProblem(say(e))
-    }
-  }
-
-  async function copy() {
-    if (!link) return
-    await navigator.clipboard.writeText(link)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  const busy = phase === 'context' || phase === 'qr' || phase === 'device' || phase === 'chain'
-  const human = device?.status === 'active' && Boolean(device?.nullifier)
-  const view: View = override ?? (!wedgie
-    ? { kind: 'off' }
-    : phase === 'qr' && qr && qrUp
-      ? { kind: 'qr', ...qr }
-      : phase === 'device' && nullifier && device
-        ? { kind: 'bind', key: device.key, nullifier }
-        : { kind: 'home', name: device?.name ?? null, human })
-  const stepClass = (i: number) =>
-    phase === 'done' || i < reached ? 'done' : i === reached ? (phase === 'stopped' ? 'failed' : 'now') : ''
+  const busy = binding || naming || killing || forgetting
+  const boundTx = live.state === 'bound' && boundFor === name ? live.on.tx : null
+  const human = set ? device?.nullifier : live.state === 'bound' ? live.on.bound.nullifier : null
+  const screen: View =
+    view ?? (!wedgie ? { kind: 'off' } : { kind: 'home', name: device?.name ?? null, human: set })
 
   return (
     <>
-      <header className="bar">
-        <img src="/icon.svg" alt="" />
-        <h1>Knock Console</h1>
-        <p className="status" role="status">
-          <span className={`dot ${knockd}`} />
-          {knockd === 'ready' ? 'knockd is ready' : knockd === 'down' ? "knockd isn't running" : 'Looking for knockd'}
-        </p>
-      </header>
-
+      <Bar />
       <main className="console">
-        <section aria-label="Your Wedgie">
-          <Screen view={view} waitingForGreen={phase === 'device' || override?.kind === 'become'} />
-          {device ? (
-            <dl className="facts">
-              <dt>Name</dt>
-              <dd>{device.name ?? 'not named yet'}</dd>
-              <dt>Key</dt>
-              <dd className="hex">{short(device.key)}</dd>
-              <dt>Human</dt>
-              <dd>{human && device.nullifier ? <span className="hex">bound, {short(device.nullifier)}</span> : 'not bound yet'}</dd>
-              <dt>App</dt>
-              <dd>
-                {device.app}, firmware {device.firmware}
-              </dd>
-            </dl>
-          ) : null}
-          <div className="side-actions">
-            {!supported ? null : wedgie ? (
-              <button type="button" className="quiet" onClick={() => current.current?.close()} disabled={busy || elsewhere}>
+        <header className="page-head">
+          <h1>Set up your Wedgie</h1>
+          <p className="lede">
+            Connect it, choose its name, bind it to you with World ID, then put the name in ENS. After that, a Knock
+            site lets you in with one press.
+          </p>
+          <p className="lost">
+            Lost your Wedgie, or had it stolen? <a href="#kill">Kill its name</a> with your wallet. The Wedgie needn't
+            be here.
+          </p>
+        </header>
+
+        <div className="layout">
+          <aside className="device-panel" aria-label="Your Wedgie">
+            <Screen view={screen} waitingForGreen={screen.kind === 'bind' || screen.kind === 'become'} />
+            {device ? (
+              <dl className="facts">
+                <dt>Name</dt>
+                <dd>{device.name ?? 'none yet'}</dd>
+                <dt>Human</dt>
+                <dd>{human ? <code>{short(human)}</code> : 'not bound yet'}</dd>
+                <dt>Key</dt>
+                <dd>
+                  <code>{short(device.key)}</code>
+                </dd>
+                <dt>App</dt>
+                <dd>
+                  {device.app} {device.firmware}
+                </dd>
+              </dl>
+            ) : null}
+            {wedgie ? (
+              <button type="button" className="btn small" onClick={() => current.current?.close()} disabled={busy}>
                 Disconnect
               </button>
-            ) : (
-              <button type="button" className="primary" onClick={connect}>
-                Connect your Wedgie
-              </button>
-            )}
-          </div>
-        </section>
-
-        <div>
-          <section aria-labelledby="bind-title" className="part">
-            <h2 id="bind-title">Bind this Wedgie to a human</h2>
-            <p className="lede">
-              A World ID proof says one human is here, and a green press on the Wedgie says it agrees. Both go to World
-              Chain together, and from then on the Wedgie can knock as a human.
-            </p>
-
-            {!supported ? (
-              <p className="problem">This page talks to the Wedgie over USB, which only Chrome and Edge can do. Open it in one of those.</p>
             ) : null}
-            {knockd === 'down' ? (
-              <p className="problem">
-                knockd isn't answering at <code>{KNOCKD}</code>. Start it from the repo with <code>cargo run -p knockd</code>.
-              </p>
-            ) : null}
-            {problem ? <p className="problem">{problem}</p> : null}
+          </aside>
 
-            <NameField
-              label={label}
-              parent={parent}
-              onChange={(l, p) => {
-                setLabel(l)
-                setParent(p)
-              }}
-              disabled={busy || elsewhere}
-            />
-
-            <fieldset className="where" disabled={busy || elsewhere}>
-              <legend>Who proves it</legend>
-              <label>
-                <input type="radio" name="env" checked={env === 'staging'} onChange={() => setEnv('staging')} />
-                World ID Simulator
-                <small>A test identity in your browser. Binds on the staging contract.</small>
-              </label>
-              <label>
-                <input type="radio" name="env" checked={env === 'production'} onChange={() => setEnv('production')} />
-                World App
-                <small>Your own World ID, on your phone. It proves you for Knock once; your session binds every Wedgie after.</small>
-              </label>
-            </fieldset>
-
-            <div className="who" aria-live="polite">
-              {me ? (
-                <>
-                  <p>
-                    Binding as human <span className="hex">{short(me.nullifier)}</span> ({who?.whence}). World App proves
-                    their Knock session, for this Wedgie or any other, as often as they bind.
-                  </p>
-                  <button type="button" className="quiet" onClick={bindAsNew} disabled={busy || elsewhere}>
-                    Bind as someone else
-                  </button>
-                </>
-              ) : (
-                <>
-                  <p>
-                    A first binding: World App proves you for Knock once, and that proof starts your Knock session. Bound a
-                    Wedgie before? Connect it, or find yourself by a name you bound, killed ones too, or your nullifier.
-                  </p>
-                  <div className="find">
-                    <input
-                      value={findBy}
-                      onChange={(e) => setFindBy(e.target.value)}
-                      placeholder="wedgie.itzraj.eth or 0x…"
-                      spellCheck={false}
-                      aria-label="A name you bound, or your nullifier"
-                      disabled={busy || elsewhere || finding}
-                    />
-                    <button
-                      type="button"
-                      className="quiet"
-                      onClick={findMe}
-                      disabled={!findBy.trim() || knockd !== 'ready' || busy || elsewhere || finding}
-                    >
-                      {finding ? 'Finding…' : 'Find me'}
-                    </button>
-                  </div>
-                </>
-              )}
-            </div>
-
-            <ol className="steps">
-              <li className={stepClass(0)}>
-                <div>
-                  <strong>knockd signs a World ID request</strong>
-                  <p>
-                    {me
-                      ? 'A proof of your Knock session, which World App gives as often as you bind.'
-                      : `A proof for ${ACTION[env]} that starts your Knock session. World App gives it once per human.`}{' '}
-                    Only Knock's own server can ask for either.
-                  </p>
-                </div>
-              </li>
-              <li className={stepClass(1)}>
-                <div>
-                  <strong>Scan the QR on your Wedgie</strong>
-                  {env === 'staging' ? (
-                    <p>
-                      In the{' '}
-                      <a href="https://simulator.worldcoin.org" target="_blank" rel="noreferrer">
-                        World ID Simulator
-                      </a>
-                      , scan the Wedgie's QR or paste the link below.
-                    </p>
-                  ) : (
-                    <p>Open World App on your phone and scan the QR on the Wedgie's screen.</p>
-                  )}
-                  {phase === 'qr' && link ? (
-                    <div className="link">
-                      <code>{link}</code>
-                      <button type="button" className="quiet" onClick={copy}>
-                        {copied ? 'Copied' : 'Copy link'}
-                      </button>
-                      {!qrUp ? (
-                        <button type="button" className="quiet" onClick={showAgain}>
-                          Show the QR again
-                        </button>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </li>
-              <li className={stepClass(2)}>
-                <div>
-                  <strong>Press green on the Wedgie's BIND page</strong>
-                  <p>It names what it binds: its own key, to the human the proof is for. Red says no.</p>
-                </div>
-              </li>
-              <li className={stepClass(3)}>
-                <div>
-                  <strong>knockd sends it to World Chain</strong>
-                  <p>It checks both yeses first, so a binding that would fail costs nothing.</p>
-                </div>
-              </li>
-            </ol>
-
-            <div className="actions">
-              <button
-                type="button"
-                className="primary"
-                onClick={start}
-                disabled={!device || !nameOk || knockd !== 'ready' || busy || elsewhere}
-              >
-                Bind this Wedgie
-              </button>
-              {phase === 'context' || phase === 'qr' ? (
-                <button type="button" className="quiet" onClick={() => abort.current?.abort()}>
-                  Cancel
-                </button>
-              ) : null}
-              {phase === 'device' ? <p>Waiting for a press on the Wedgie. Red stops it.</p> : null}
-            </div>
-
-            {bound ? (
-              <div className="bound" role="status">
-                <h3>Bound on World Chain</h3>
-                <p>
-                  <a href={`${EXPLORER}/tx/${bound.tx}`} target="_blank" rel="noreferrer">
-                    Transaction <span className="hex">{short(bound.tx)}</span>
-                  </a>
-                  , block {bound.block}, {bound.gasUsed.toLocaleString()} gas.
-                </p>
-                <p>
-                  Nullifier <span className="hex">{short(bound.bound.nullifier)}</span>, key hash{' '}
-                  <span className="hex">{short(bound.bound.keyHash)}</span>.{' '}
-                  {bound.first
-                    ? 'Your first binding: it started your Knock session, so your next Wedgie, or this one again after a kill, binds as you.'
-                    : 'Bound by your Knock session: the same human as your other Wedgies.'}
-                </p>
-                {bound.environment === 'production' ? (
-                  <p>
-                    Next, name it {name} in ENS, below: the name's records point at this binding, which is for that
-                    name only.
-                  </p>
-                ) : (
-                  <p>
-                    This was the Simulator's test identity, so the Wedgie's own screen stays as it was. Only a World App
-                    binding can be named in ENS.
-                  </p>
-                )}
+          <div className="flow">
+            {set && !stale && device?.name ? (
+              <div className="ready" role="status">
+                <p className="ready-title">{device.name} is ready</p>
+                <p>A Knock site lets it in with one green press, on any computer with Chrome or Edge.</p>
+                <a className="btn go" href={club}>
+                  Knock at the Human Club
+                </a>
               </div>
             ) : null}
-          </section>
 
-          <Naming
-            wedgie={wedgie}
-            device={device}
-            label={label}
-            parent={parent}
-            onName={(l, p) => {
-              setLabel(l)
-              setParent(p)
-            }}
-            wallet={wallet}
-            onWallet={setWallet}
-            onDevice={setDevice}
-            onView={setOverride}
-            onBusy={setElsewhere}
-            justBound={justBound}
-            locked={busy}
-          />
-          <KillSwitch
-            wedgie={wedgie}
-            device={device}
-            wallet={wallet}
-            onWallet={setWallet}
-            onDevice={setDevice}
-            onBusy={setElsewhere}
-            busy={busy || elsewhere}
-          />
+            <ol className="steps">
+              <Step
+                id="connect"
+                n={1}
+                state={steps[0]}
+                title="Connect your Wedgie"
+                done={
+                  device ? (
+                    <>
+                      {device.app} {device.firmware}, its key <code>{short(device.key)}</code>.
+                    </>
+                  ) : null
+                }
+              >
+                {!supported ? (
+                  <p className="callout bad">
+                    Your Wedgie connects over USB, which only Chrome, Edge and other Chromium browsers on a computer can
+                    do. Open this page in one of those.
+                  </p>
+                ) : (
+                  <>
+                    <p>
+                      Plug it into this computer with a cable that carries data, then connect it. Your browser asks
+                      which device to use.
+                    </p>
+                    {problem ? <p className="callout bad">{problem}</p> : null}
+                    <div className="actions">
+                      <button type="button" className="btn go" onClick={connect} disabled={meeting}>
+                        {meeting ? 'Checking your Wedgie…' : 'Connect your Wedgie'}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Step>
+
+              <Step
+                id="name"
+                n={2}
+                state={steps[1]}
+                title="Choose its name"
+                done={
+                  set && device?.name ? (
+                    <>
+                      <strong>{device.name}</strong>
+                      {stale ? ', which ENS no longer has for it.' : '.'}
+                    </>
+                  ) : chosen ? (
+                    <>
+                      <strong>{chosen.name}</strong>: {chosen.found}.{' '}
+                      {!set ? (
+                        <button type="button" className="text-btn" onClick={() => setChosen(null)} disabled={busy}>
+                          Change
+                        </button>
+                      ) : null}
+                    </>
+                  ) : null
+                }
+              >
+                {device ? (
+                  <NameStep
+                    label={label}
+                    parent={parent}
+                    onChange={(l, p) => {
+                      setLabel(l)
+                      setParent(p)
+                    }}
+                    env={env}
+                    device={device}
+                    wallet={wallet}
+                    onWallet={setWallet}
+                    onChosen={(n, found) => setChosen({ name: n, found })}
+                    locked={busy}
+                  />
+                ) : null}
+              </Step>
+
+              <Step
+                id="bind"
+                n={3}
+                state={steps[2]}
+                title="Bind it to you"
+                done={
+                  <>
+                    Bound for {set ? device?.name : name}
+                    {human ? (
+                      <>
+                        , to human <code>{short(human)}</code>
+                      </>
+                    ) : null}
+                    {boundTx || pohTx ? (
+                      <>
+                        , in <TxLink tx={(boundTx ?? pohTx) as string} />
+                      </>
+                    ) : null}
+                    .
+                  </>
+                }
+              >
+                {wedgie && device ? (
+                  <BindStep
+                    wedgie={wedgie}
+                    device={device}
+                    env={env}
+                    name={name}
+                    known={live}
+                    boundFor={boundFor}
+                    killed={killed}
+                    knockd={knockd}
+                    onBound={onBound}
+                    onUseName={takeName}
+                    onLookAgain={() => setLookAgain((n) => n + 1)}
+                    onView={setView}
+                    onBusy={setBinding}
+                  />
+                ) : null}
+              </Step>
+
+              <Step
+                id="ens"
+                n={4}
+                state={steps[3]}
+                title="Name it in ENS"
+                done={
+                  device?.name ? (
+                    <>
+                      {device.name} resolves in ENS, with Knock's records.{' '}
+                      <a href={`https://app.ens.domains/${device.name}`} target="_blank" rel="noreferrer">
+                        See it in the ENS app
+                      </a>
+                      .
+                      <SentList sent={named} />
+                    </>
+                  ) : null
+                }
+              >
+                {stale && device?.name ? (
+                  <>
+                    <div className="callout warn">
+                      <p className="callout-title">
+                        {stale === 'gone' ? `ENS no longer has ${device.name} for it` : `${device.name} is revoked`}
+                      </p>
+                      <p>
+                        {stale === 'gone'
+                          ? 'Its name was killed while it was away, or went to another Wedgie, so no site takes its knocks. The Wedgie still shows the name until it forgets it.'
+                          : "Its knock.status in ENS isn't active, so no site takes its knocks. To set it up again, kill the name with the kill switch, below: the Wedgie forgets it too."}
+                      </p>
+                    </div>
+                    {forgetProblem ? <p className="callout bad">{forgetProblem}</p> : null}
+                    <div className="actions">
+                      {stale === 'gone' ? (
+                        <button type="button" className="btn go" onClick={forgetStale} disabled={busy}>
+                          {forgetting ? 'Forgetting…' : `Have it forget ${device.name}`}
+                        </button>
+                      ) : (
+                        <a className="btn go" href="#kill">
+                          Go to the kill switch
+                        </a>
+                      )}
+                    </div>
+                    {stale === 'gone' ? (
+                      <p className="note">It forgets its binding with the name, so setting it up again takes a new one.</p>
+                    ) : null}
+                  </>
+                ) : env === 'staging' ? (
+                  <p className="callout">
+                    The Simulator's bindings are tests, and ENS names point only at World App ones. Turn testing off,
+                    below, and bind with World App to name your Wedgie.
+                  </p>
+                ) : wedgie && device && boundTx ? (
+                  <Naming
+                    wedgie={wedgie}
+                    device={device}
+                    label={label}
+                    parent={parent}
+                    binding={boundTx}
+                    wallet={wallet}
+                    onWallet={setWallet}
+                    onNamed={onNamed}
+                    onView={setView}
+                    onBusy={setNaming}
+                  />
+                ) : null}
+              </Step>
+            </ol>
+
+            <details className="testing" open={env === 'staging' || undefined}>
+              <summary>Testing without World App</summary>
+              <label className="check">
+                <input
+                  type="checkbox"
+                  checked={env === 'staging'}
+                  onChange={(e) => setEnv(e.target.checked ? 'staging' : 'production')}
+                  disabled={busy}
+                />
+                Bind with the World ID Simulator
+              </label>
+              <p className="muted">
+                Its test identities bind on Knock's staging contract. Verifiers never take those bindings, and ENS
+                names can't point at them.
+              </p>
+            </details>
+
+            <KillSwitch
+              wedgie={wedgie}
+              device={device}
+              wallet={wallet}
+              onWallet={setWallet}
+              onDevice={setDevice}
+              onBusy={setKilling}
+              busy={busy}
+            />
+          </div>
         </div>
       </main>
     </>

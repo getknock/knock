@@ -1,8 +1,14 @@
-import type { Metadata } from 'next'
-import { Console } from './Console'
+'use client'
+import { useEffect } from 'react'
 
-export const metadata: Metadata = { title: 'Knock Console' }
-
-export default function ConsolePage() {
-  return <Console />
+/** The Console's old address: it's the home page now, at getknock.dev. */
+export default function Moved() {
+  useEffect(() => location.replace('/'), [])
+  return (
+    <main className="moved">
+      <p>
+        The Console is at <a href="/">the home page</a> now.
+      </p>
+    </main>
+  )
 }

@@ -156,8 +156,9 @@ export async function send(c: Connected, tx: { to: Address; data: Hex; what: str
   return { hash, gasUsed: r.gasUsed }
 }
 
-// eth_simulateV1, where the wallet's own RPC doesn't answer it: the public node the verifier reads mainnet from
-const PUBLIC = createPublicClient({ chain: mainnet, transport: http('https://ethereum-rpc.publicnode.com') })
+/** The public node the verifier reads mainnet from: for eth_simulateV1 where the wallet's own RPC doesn't answer
+ *  it, and for reading ENS with no wallet connected. */
+export const PUBLIC = createPublicClient({ chain: mainnet, transport: http('https://ethereum-rpc.publicnode.com') })
 
 /** The calls in order, from the wallet, in one block (eth_simulateV1): each sees what the ones before it did. */
 async function simulateTogether(c: Connected, txs: { to: Address; data: Hex; what: string }[]) {

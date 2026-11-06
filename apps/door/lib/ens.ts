@@ -180,6 +180,18 @@ export function recordTexts(r: Records): [string, string][] {
   ]
 }
 
+/** What a verifier's check 3 finds on a Wedgie's name: Knock's records for this key, switched on ('live') or off
+ *  ('revoked': any status but active is refused), or none for it ('gone': never named, killed, or another Wedgie's
+ *  now). A Wedgie can't tell: one whose name was killed while it was away still shows the name. */
+export async function knockState(c: PublicClient, name: string, key: Hex): Promise<'live' | 'revoked' | 'gone'> {
+  const [k, status] = await Promise.all([
+    c.getEnsText({ name, key: 'knock.key' }),
+    c.getEnsText({ name, key: 'knock.status' }),
+  ])
+  if (!k || k.toLowerCase() !== key.toLowerCase()) return 'gone'
+  return status === 'active' ? 'live' : 'revoked'
+}
+
 export function recordCalls(name: string, r: Records): Hex[] {
   const dns = dnsEncode(name)
   return [

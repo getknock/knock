@@ -17,11 +17,13 @@ export function WalletBox({ connected, onConnect }: { connected: Connected | nul
   if (connected)
     return (
       <p className="wallet">
-        <span className="dot ready" /> {connected.name}, <span className="hex">{short(connected.account)}</span>, on
-        Ethereum.
-        {connected.batch
-          ? ' It batches calls: each step is one transaction, all of it or none.'
-          : " It doesn't batch calls, so each ENS write is its own transaction."}
+        <span className="dot on" aria-hidden="true" />
+        <span>
+          {connected.name}, <code>{short(connected.account)}</code>, on Ethereum.{' '}
+          <span className="muted">
+            {connected.batch ? 'It sends each step as one transaction.' : 'It sends each ENS write as its own transaction.'}
+          </span>
+        </span>
       </p>
     )
   return (
@@ -32,7 +34,7 @@ export function WalletBox({ connected, onConnect }: { connected: Connected | nul
             <button
               key={w.info.uuid}
               type="button"
-              className="quiet"
+              className="btn"
               onClick={async () => {
                 setProblem(null)
                 try {
@@ -47,9 +49,9 @@ export function WalletBox({ connected, onConnect }: { connected: Connected | nul
           ))}
         </div>
       ) : (
-        <p>No wallet in this browser. Add one, like MetaMask or Rabby, then reload the page.</p>
+        <p className="callout">No wallet in this browser. Add one, such as MetaMask or Rabby, then reload this page.</p>
       )}
-      {problem ? <p className="problem">{problem}</p> : null}
+      {problem ? <p className="callout bad">{problem}</p> : null}
     </div>
   )
 }
