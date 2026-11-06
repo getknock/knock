@@ -5,6 +5,23 @@
     "": {
       "name": "knock",
     },
+    "apps/bouncer": {
+      "name": "@knock-dev/bouncer",
+      "version": "0.1.0",
+      "dependencies": {
+        "@knock-dev/door-sdk": "workspace:*",
+        "next": "16.4.5",
+        "react": "19.3.1",
+        "react-dom": "19.3.1",
+      },
+      "devDependencies": {
+        "@types/bun": "1.4.4",
+        "@types/node": "26.6.6",
+        "@types/react": "19.3.0",
+        "@types/react-dom": "19.3.0",
+        "typescript": "7.0.2",
+      },
+    },
     "apps/door": {
       "name": "@knock-dev/door",
       "version": "0.1.0",
@@ -106,6 +123,8 @@
     "@img/sharp-win32-ia32": ["@img/sharp-win32-ia32@0.35.5", "", { "os": "win32", "cpu": "ia32" }, "sha512-5Zm82LoBc43nhwNybZlG7Y1KO//Zhsn306fQl29ZOuStHLGTo3BWL83q3cznX0poxSAMuYL1On/BHBxkBeKr6A=="],
 
     "@img/sharp-win32-x64": ["@img/sharp-win32-x64@0.35.5", "", { "os": "win32", "cpu": "x64" }, "sha512-x76eH0vEiHlcMQu8Y8IenntaACtddpT6W0wmXtWrnKcnKI7ME5DdgqhAD6SEWOEl1v2zDvkZDhFA9KnURwpfqg=="],
+
+    "@knock-dev/bouncer": ["@knock-dev/bouncer@workspace:apps/bouncer"],
 
     "@knock-dev/door": ["@knock-dev/door@workspace:apps/door"],
 

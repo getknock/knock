@@ -1,0 +1,264 @@
+/* The club's door is bottle green; the bouncer's list is plain white paper, ticked in ballpoint blue; a no is the
+   red stamp; the one thing to do is the brass knocker. */
+:root {
+  --door: #12382c;
+  --door-deep: #0b271f;
+  --paper: #fbfaf5;
+  --ink: #1c2230;
+  --pen: #2346b5;
+  --no: #c4122f;
+  --brass: #d4a72c;
+  --faint: #1c223066;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--door);
+  color: var(--paper);
+  font-family: var(--text), system-ui, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  font-size: 1.0625rem;
+  line-height: 1.55;
+}
+
+a {
+  color: inherit;
+  text-underline-offset: 3px;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brass);
+  outline-offset: 3px;
+}
+
+.sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.club {
+  display: grid;
+  justify-items: center;
+  gap: 2rem;
+  padding: clamp(2rem, 7vh, 4.5rem) 1rem 3rem;
+}
+
+/* The sign over the door: the one big thing on the page */
+.sign {
+  text-align: center;
+}
+
+.sign h1 {
+  margin: 0;
+  font-family: var(--sign), sans-serif;
+  font-size: clamp(3.5rem, 13vw, 7.5rem);
+  font-weight: 900;
+  line-height: 0.85;
+  letter-spacing: 0.01em;
+  color: var(--paper);
+  text-shadow: 0 0 1px var(--paper), 0 0 22px #fbfaf540;
+}
+
+.sign p {
+  margin: 0.75rem 0 0;
+  font-size: 1.25rem;
+  color: #fbfaf5cc;
+}
+
+/* The list: a sheet on the bouncer's clipboard */
+.list {
+  position: relative;
+  width: min(100%, 36rem);
+  padding: 1.75rem clamp(1.25rem, 5vw, 2.5rem) 2rem;
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  box-shadow: 0 18px 0 -8px var(--door-deep), 0 30px 60px #0007;
+}
+
+.how {
+  margin: 0 0 1.5rem;
+}
+
+.knock {
+  display: block;
+  width: 100%;
+  padding: 1rem 1.5rem;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brass);
+  color: var(--ink);
+  font: inherit;
+  font-family: var(--sign), sans-serif;
+  font-size: 1.75rem;
+  font-weight: 900;
+  line-height: 1.1;
+  box-shadow: 0 5px 0 #8a6a12;
+  cursor: pointer;
+}
+
+.knock:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 2px 0 #8a6a12;
+}
+
+.knock:disabled {
+  background: #e9e2c8;
+  color: #1c2230aa;
+  box-shadow: none;
+  cursor: progress;
+}
+
+.list h2 {
+  margin: 2rem 0 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.checks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: check;
+}
+
+.checks li {
+  display: grid;
+  grid-template-columns: 2rem 1.75rem minmax(0, 1fr);
+  align-items: center;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid #1c22301f;
+  counter-increment: check;
+}
+
+.checks li::before {
+  content: counter(check);
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.mark {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* A tick in pen, a cross in red, a dash for what wasn't asked; drawn in turn, down the list */
+.checks .pass .mark,
+.checks .fail .mark,
+.checks .skip .mark {
+  animation: mark 0.18s ease-out both;
+  animation-delay: calc(var(--i) * 140ms);
+}
+
+.checks .pass .mark {
+  background: var(--pen);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M3 11.5l4.2 4L17 4.5' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.checks .fail .mark {
+  background: var(--no);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M4.5 4.5l11 11M15.5 4.5l-11 11' fill='none' stroke='black' stroke-width='2.8' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.checks .skip .mark {
+  background: var(--faint);
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath d='M5 10h10' fill='none' stroke='black' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.checks .fail {
+  color: var(--no);
+  font-weight: 700;
+}
+
+.checks .todo,
+.checks .skip {
+  color: var(--faint);
+}
+
+@keyframes mark {
+  from {
+    opacity: 0;
+    transform: scale(1.6) rotate(-12deg);
+  }
+}
+
+/* The verdict: a rubber stamp, landing after the last check */
+.verdict {
+  margin-top: 1.5rem;
+}
+
+.verdict p {
+  margin: 0;
+}
+
+.stamp {
+  display: inline-block;
+  margin-bottom: 0.75rem !important;
+  padding: 0.1rem 0.9rem 0.2rem;
+  border: 4px solid currentColor;
+  border-radius: 8px;
+  font-family: var(--sign), sans-serif;
+  font-size: 3rem;
+  font-weight: 900;
+  line-height: 1;
+  transform: rotate(-6deg);
+  animation: stamp 0.22s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  animation-delay: calc(8 * 140ms);
+}
+
+.stamp.in {
+  color: var(--pen);
+}
+
+.stamp.out {
+  color: var(--no);
+}
+
+@keyframes stamp {
+  from {
+    opacity: 0;
+    transform: rotate(-6deg) scale(2.2);
+  }
+}
+
+.hex {
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.nothing {
+  margin: 1.5rem 0 0;
+  padding: 0.75rem 1rem;
+  border-left: 5px solid var(--no);
+  background: #c4122f12;
+}
+
+.small {
+  max-width: 36rem;
+  color: #fbfaf5aa;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .checks .mark,
+  .stamp {
+    animation: none !important;
+  }
+
+  .knock:active:not(:disabled) {
+    transform: none;
+  }
+}

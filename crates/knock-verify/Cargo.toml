@@ -1,0 +1,17 @@
+[package]
+name = "knock-verify"
+version = "0.1.0"
+edition = "2024"
+publish = false
+description = "A site's check of a knock (V1–V8): ENS for the name, World Chain for the human, the Wedgie's signature for the press, SQLite for what's been used"
+
+[dependencies]
+alloy = { version = "2.5.0", default-features = false, features = ["std", "sol-types", "eip712", "serde", "ens"] }
+p256 = { version = "0.14.0", features = ["ecdsa"] }
+rand = "0.9"
+rusqlite = { version = "0.41.1", features = ["bundled"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["macros", "rt"] }
