@@ -8,6 +8,8 @@ import { Screen, type View } from '../console/Screen'
 type Phase = 'alone' | 'framed' | 'waiting' | 'connect' | 'knocking' | 'done' | 'refused' | 'trouble'
 
 const say = (e: unknown) => (e instanceof Error ? e.message : String(e))
+/** How long the Wedgie's KNOCK page waits for a press (knock_pass) */
+const PRESS_MS = 120_000
 
 /** The Door: the popup a site opens with door-sdk's knock(). It knocks once, for the site that opened it. */
 export function Door() {
@@ -15,6 +17,8 @@ export function Door() {
   const [request, setRequest] = useState<Request | null>(null)
   const [device, setDevice] = useState<Device | null>(null)
   const [words, setWords] = useState<string | null>(null)
+  const [asked, setAsked] = useState<number | null>(null)
+  const [now, setNow] = useState(() => Date.now())
   const wedgie = useRef<Wedgie | null>(null)
   const answered = useRef(false)
   const requested = useRef(false)
@@ -34,7 +38,7 @@ export function Door() {
         if (!w) w = await Wedgie.known()
       } catch {
         setPhase('trouble')
-        setWords('Another tab has the Wedgie, like the Knock Console: disconnect it there, then try again.')
+        setWords('Another tab has your Wedgie, such as the Knock Console. Disconnect it there, then try again.')
         return
       }
       if (!w) {
@@ -46,6 +50,7 @@ export function Door() {
       try {
         const d = await meet(w)
         setDevice(d)
+        setAsked(Date.now())
         const assertion = await knockOn(w, d, req)
         answer(req.origin, { ok: true, assertion })
         setPhase('done')
@@ -61,6 +66,8 @@ export function Door() {
           setPhase('refused')
         }
         setWords(say(e))
+      } finally {
+        setAsked(null)
       }
     },
     [answer],
@@ -99,61 +106,88 @@ export function Door() {
     }
   }, [answer, knock])
 
+  // The time left to press, while the Wedgie waits for one
+  useEffect(() => {
+    if (asked === null) return
+    const t = setInterval(() => setNow(Date.now()), 1000)
+    return () => clearInterval(t)
+  }, [asked])
+  const left = asked === null ? null : Math.max(0, Math.ceil((asked + PRESS_MS - now) / 1000))
+
+  const pressing = phase === 'knocking' && Boolean(device?.name) && asked !== null
   const view: View =
-    phase === 'knocking' && device?.name && request
+    pressing && device?.name && request
       ? { kind: 'knock', name: device.name, origin: request.origin }
       : device
         ? { kind: 'home', name: device.name, human: device.status === 'active' && Boolean(device.nullifier) }
         : { kind: 'off' }
 
   return (
-    <main className="door">
+    <div className="door">
       <header className="door-bar">
-        <img src="/icon.svg" alt="" />
-        <span>Knock</span>
+        <img src="/icon.svg" alt="" width={22} height={22} />
+        Knock
       </header>
 
       {phase === 'alone' || phase === 'framed' ? (
-        <p className="lede">
-          {phase === 'framed'
-            ? "The Door doesn't open inside another page."
-            : "This is the Door a site opens when it asks for a knock. Open it from a site's Knock button."}
-        </p>
+        <main className="door-main">
+          <h1 className="door-title">The Door</h1>
+          <p>
+            {phase === 'framed'
+              ? "The Door doesn't open inside another page, since that page could cover what it says."
+              : "Sites open this window when you press their Knock button: it asks your Wedgie to knock for them. There's nothing to do here on its own."}
+          </p>
+          {phase === 'alone' ? (
+            <p>
+              <a href="https://getknock.dev">Set up your Wedgie</a>, or read{' '}
+              <a href="https://docs.getknock.dev">the docs</a>.
+            </p>
+          ) : null}
+        </main>
       ) : (
-        <>
+        <main className="door-main">
           <section className="asker" aria-live="polite">
             {request ? (
               <>
                 <p className="origin">{request.origin}</p>
                 <p>asks your Wedgie to knock, as a bound human</p>
+                <p className="muted small">Your browser told the Door this address.</p>
               </>
             ) : (
-              <p>Waiting for the site's request…</p>
+              <p className="muted">Waiting for the site's request…</p>
             )}
           </section>
 
-          <Screen view={view} waitingForGreen={phase === 'knocking' && Boolean(device)} />
+          <Screen view={view} waitingForGreen={pressing} />
 
           <section className="door-say" role="status">
-            {phase === 'knocking' && device?.name ? (
-              <p>
-                Press green on the Wedgie to knock as <strong>{device.name}</strong>. Red says no.
-              </p>
+            {phase === 'connect' ? <p>Connect your Wedgie to knock. Your browser asks which device to use.</p> : null}
+            {phase === 'knocking' && !pressing ? <p>Checking your Wedgie…</p> : null}
+            {pressing && device?.name ? (
+              <>
+                <p>
+                  Press green to knock as <strong>{device.name}</strong>. Red says no.
+                </p>
+                {left !== null ? (
+                  <p className="muted small">
+                    {Math.floor(left / 60)}:{String(left % 60).padStart(2, '0')} to press
+                  </p>
+                ) : null}
+              </>
             ) : null}
-            {phase === 'knocking' && !device ? <p>Meeting your Wedgie…</p> : null}
             {phase === 'done' ? (
-              <p>
-                Knocked as <strong>{device?.name}</strong>. {request?.origin} checks it now.
+              <p className="knocked">
+                Knocked as <strong>{device?.name}</strong>. {request?.origin} checks it now, and this window closes.
               </p>
             ) : null}
-            {words ? <p className={phase === 'done' ? '' : 'problem'}>{words}</p> : null}
+            {words && phase !== 'done' ? <p className="callout bad">{words}</p> : null}
           </section>
 
           <div className="actions">
             {phase === 'connect' && request ? (
               <button
                 type="button"
-                className="primary"
+                className="btn go"
                 onClick={async () => {
                   try {
                     await knock(request, await Wedgie.pick())
@@ -166,18 +200,18 @@ export function Door() {
               </button>
             ) : null}
             {phase === 'trouble' && request ? (
-              <button type="button" className="primary" onClick={() => knock(request)}>
+              <button type="button" className="btn go" onClick={() => knock(request)}>
                 Try again
               </button>
             ) : null}
             {phase !== 'done' ? (
-              <button type="button" className="quiet" onClick={() => window.close()}>
+              <button type="button" className="btn" onClick={() => window.close()}>
                 {phase === 'refused' ? 'Close' : 'Cancel'}
               </button>
             ) : null}
           </div>
-        </>
+        </main>
       )}
-    </main>
+    </div>
   )
 }
