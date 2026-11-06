@@ -1,15 +1,22 @@
 {
   "chainId": 480,
   "production": {
-    "KnockBinding": "0xB1f8B9c895428d6a0e1f82b0A326BdB357192132",
+    "KnockBinding": "0x001173856e4148538c46A0B572664C0Fde99B62c",
     "WorldIDVerifier": "0x00000000009E00F9FE82CfeeBB4556686da094d7",
-    "block": 37290206,
-    "RpRegistry": "0xD9A213A92Bca460D56cDbBF4d775b48fB5925BbC"
+    "block": 37298433,
+    "RpRegistry": "0xD9A213A92Bca460D56cDbBF4d775b48fB5925BbC",
+    "version": 2
   },
   "staging": {
-    "KnockBinding": "0x639e41f70CbD1F1395BaC76De427D1469B46B190",
+    "KnockBinding": "0xea7CFb1D38BeC7296fBfe959E4b36ec1B871e2d8",
     "WorldIDVerifier": "0x703a6316c975DEabF30b637c155edD53e24657DB",
-    "block": 37290197,
-    "RpRegistry": "0x37d2462fE7B4a07987263AAd062C6593C4f567b9"
+    "block": 37298441,
+    "RpRegistry": "0x37d2462fE7B4a07987263AAd062C6593C4f567b9",
+    "version": 2
+  },
+  "retired": {
+    "note": "KnockBinding v1 (deployed 2026-11-06): its bindings name no ENS name, so one could be reused under any name. Verifiers and knockd don't take them (D22).",
+    "production": "0xB1f8B9c895428d6a0e1f82b0A326BdB357192132",
+    "staging": "0x639e41f70CbD1F1395BaC76De427D1469B46B190"
   }
 }

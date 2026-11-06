@@ -19,9 +19,10 @@ contract P256Verify {
     }
 }
 
-/// World ID's verifier as KnockBinding sees it: every proof holds, or none does.
+/// World ID's verifier as KnockBinding sees it: every proof holds, none does, or only one made for one signal.
 contract WorldIDStub is IWorldIDVerifier {
     bool public refuse;
+    uint256 public signalOnly;
 
     error Refused();
 
@@ -29,18 +30,22 @@ contract WorldIDStub is IWorldIDVerifier {
         refuse = r;
     }
 
-    function verify(uint256, uint256, uint64, uint256, uint256, uint64, uint64, uint256, uint256[5] calldata)
+    function setSignalOnly(uint256 h) external {
+        signalOnly = h;
+    }
+
+    function verify(uint256, uint256, uint64, uint256, uint256 signalHash, uint64, uint64, uint256, uint256[5] calldata)
         external
         view
     {
-        if (refuse) revert Refused();
+        if (refuse || (signalOnly != 0 && signalHash != signalOnly)) revert Refused();
     }
 }
 
 abstract contract Vectors is Test {
     uint256 constant N = 0xFFFFFFFF00000000FFFFFFFFFFFFFFFFBCE6FAADA7179E84F3B9CAC2FC632551;
 
-    event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, uint64 expiresAtMin);
+    event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, bytes32 indexed node, uint64 expiresAtMin);
 
     string json;
     // spec/vectors/v1.json: its published test key, and its KnockBind
@@ -53,6 +58,7 @@ abstract contract Vectors is Test {
     uint64 expiresAtMin;
     bytes32 r;
     bytes32 s;
+    bytes32 node; // the vectors' device name's
 
     function readVectors() internal {
         json = vm.readFile("../spec/vectors/v1.json");
@@ -65,6 +71,7 @@ abstract contract Vectors is Test {
         expiresAtMin = uint64(vm.parseJsonUint(json, ".structs.KnockBind.message.expiresAtMin"));
         r = vm.parseJsonBytes32(json, ".structs.KnockBind.r");
         s = vm.parseJsonBytes32(json, ".structs.KnockBind.s");
+        node = vm.parseJsonBytes32(json, ".device.node");
     }
 
     /// The test EVM's P256VERIFY, or the Solidity one where it has none.
@@ -110,11 +117,13 @@ contract KnockBindingTest is Vectors {
         );
         assertEq(address(kb.WORLD_ID()), address(world));
         assertEq(kb.RP_ID(), RP);
+        assertEq(kb.VERSION(), 2);
     }
 
-    /// The vectors' binding: World ID asked about exactly this proof, signal and RP, and Bound says so.
+    /// The vectors' binding: World ID asked about exactly this proof, signal (key, then node) and RP, and Bound
+    /// says so, with the name's node.
     function test_bind() public {
-        uint256 signalHash = vm.parseJsonUint(json, ".key.signalHash");
+        uint256 signalHash = vm.parseJsonUint(json, ".bind.signalHash");
         vm.expectCall(
             address(world),
             abi.encodeCall(
@@ -122,14 +131,29 @@ contract KnockBindingTest is Vectors {
             )
         );
         vm.expectEmit(address(kb));
-        emit Bound(nullifier, vm.parseJsonBytes32(json, ".key.keyHash"), expiresAtMin);
-        kb.bind(nullifier, 7, expiresAtMin, 1, 0, proof, x, y, r, s);
+        emit Bound(nullifier, vm.parseJsonBytes32(json, ".key.keyHash"), node, expiresAtMin);
+        kb.bind(nullifier, 7, expiresAtMin, 1, 0, proof, x, y, node, r, s);
+    }
+
+    /// The human's proof names the name: replayed for another name (the device's signature holds for any), World
+    /// ID is asked about another signal and says no. So a lost device can't take its binding to a new name (D22).
+    function test_aProofForOneNameIsNoProofForAnother() public {
+        world.setSignalOnly(vm.parseJsonUint(json, ".bind.signalHash"));
+        kb.bind(nullifier, 7, expiresAtMin, 1, 0, proof, x, y, node, r, s);
+        vm.expectRevert(WorldIDStub.Refused.selector);
+        kb.bind(nullifier, 7, expiresAtMin, 1, 0, proof, x, y, keccak256("another name's node"), r, s);
+    }
+
+    function test_refuses_noName() public {
+        vm.expectCall(address(world), abi.encodeWithSelector(IWorldIDVerifier.verify.selector), 0);
+        vm.expectRevert(KnockBinding.NoName.selector);
+        kb.bind(nullifier, 7, expiresAtMin, 1, 0, proof, x, y, bytes32(0), r, s);
     }
 
     function refused(KnockBinding at, uint256 n, uint64 e, bytes32 x_, bytes32 y_, bytes32 r_, bytes32 s_) internal {
         vm.expectCall(address(world), abi.encodeWithSelector(IWorldIDVerifier.verify.selector), 0);
         vm.expectRevert(KnockBinding.NotSignedByDevice.selector);
-        at.bind(n, 7, e, 1, 0, proof, x_, y_, r_, s_);
+        at.bind(n, 7, e, 1, 0, proof, x_, y_, node, r_, s_);
     }
 
     function test_refuses_anotherR() public {
@@ -177,12 +201,14 @@ contract KnockBindingTest is Vectors {
     function test_aWorldIdRefusalStands() public {
         world.setRefuse(true);
         vm.expectRevert(WorldIDStub.Refused.selector);
-        kb.bind(nullifier, 7, expiresAtMin, 1, 0, proof, x, y, r, s);
+        kb.bind(nullifier, 7, expiresAtMin, 1, 0, proof, x, y, node, r, s);
     }
 
-    /// Any key, either parity of y: the signal is its compressed form's hash, Bound its keccak256(x || y).
-    function testFuzz_bind(uint256 key, uint256 n, uint64 e, uint256 nonce) public {
+    /// Any key, either parity of y, any name: the signal hashes its compressed form and the node, Bound has
+    /// keccak256(x || y) and the node.
+    function testFuzz_bind(uint256 key, uint256 n, uint64 e, uint256 nonce, bytes32 nd) public {
         key = bound(key, 1, N - 1);
+        vm.assume(nd != bytes32(0));
         (uint256 px, uint256 py) = vm.publicKeyP256(key);
         (bytes32 r_, bytes32 s_) = signed(kb, key, n, e);
         bytes memory compressed = abi.encodePacked(py % 2 == 1 ? bytes1(0x03) : bytes1(0x02), px);
@@ -190,12 +216,12 @@ contract KnockBindingTest is Vectors {
             address(world),
             abi.encodeCall(
                 IWorldIDVerifier.verify,
-                (n, kb.ACTION(), RP, nonce, uint256(keccak256(compressed)) >> 8, e, 1, 0, proof)
+                (n, kb.ACTION(), RP, nonce, uint256(keccak256(abi.encodePacked(compressed, nd))) >> 8, e, 1, 0, proof)
             )
         );
         vm.expectEmit(address(kb));
-        emit Bound(n, keccak256(abi.encodePacked(px, py)), e);
-        kb.bind(n, nonce, e, 1, 0, proof, bytes32(px), bytes32(py), r_, s_);
+        emit Bound(n, keccak256(abi.encodePacked(px, py)), nd, e);
+        kb.bind(n, nonce, e, 1, 0, proof, bytes32(px), bytes32(py), nd, r_, s_);
     }
 }
 
@@ -247,7 +273,7 @@ contract KnockBindingForkTest is Vectors {
     function attempt(uint64 issuer, uint64 e, uint256 root_, bytes4 err) internal {
         (bytes32 r_, bytes32 s_) = signed(kb, secret, nullifier, e);
         vm.expectRevert(err);
-        kb.bind(nullifier, 7, e, issuer, 0, [uint256(1), 2, 3, 4, root_], x, y, r_, s_);
+        kb.bind(nullifier, 7, e, issuer, 0, [uint256(1), 2, 3, 4, root_], x, y, node, r_, s_);
     }
 
     function test_fork_eachArgumentReachesWorldID() public {

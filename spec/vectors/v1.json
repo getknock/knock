@@ -12,9 +12,7 @@
     "x": "0x90f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd",
     "y": "0xa06f92c6f12059592b8081fb065b4e1a22688867a0f16c8e6124d00615cf3f10",
     "compressed": "0x0290f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd",
-    "keyHash": "0x671f5e17aee9ef2f21079d4bc7d8038a6f436d58ff1bf64b716c1673260503e0",
-    "signal": "0x0290f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fd",
-    "signalHash": "0x00946c85bbeedac52d4f003085eace92310960481790ec16c2cbe350341436d0"
+    "keyHash": "0x671f5e17aee9ef2f21079d4bc7d8038a6f436d58ff1bf64b716c1673260503e0"
   },
   "action": {
     "name": "knock-bind",
@@ -23,6 +21,11 @@
   "device": {
     "name": "wedgie.itzraj.eth",
     "node": "0xbd3a7fbbd8fe245754eeea615a60590c4f9f5650ec24c4a6250b171c5b85ebb8"
+  },
+  "bind": {
+    "note": "A binding's World ID signal: the device's key, then its name's node (KnockBinding v2).",
+    "signal": "0x0290f6af01ab92e60f637181654b5658e7e846f3e4cf8f1ce269650115568908fdbd3a7fbbd8fe245754eeea615a60590c4f9f5650ec24c4a6250b171c5b85ebb8",
+    "signalHash": "0x00b21db310a7dec1157b21891a7d762026649229bf8aac6fe871908c22b65790"
   },
   "structs": {
     "KnockHello": {

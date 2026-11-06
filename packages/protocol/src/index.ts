@@ -11,6 +11,7 @@ import {
   keccak256,
   namehash,
   pad,
+  size,
   stringToBytes,
   toHex,
 } from 'viem'
@@ -98,9 +99,11 @@ export function signalHash(signal: string): Hex {
 
 export const ACTION_HASH = hashToField(stringToBytes(ACTION))
 
-/** A binding's signal: the device's compressed key in lowercase hex, so its signal hash is hash_to_field(key bytes). */
-export function bindSignal(key: Hex): string {
-  return key.toLowerCase()
+/** A binding's signal: the device's compressed key, then the node of the ENS name it binds for (D22), in lowercase
+ *  hex, so its signal hash is hash_to_field(key ‖ node): the human's proof binds the key for that name only. */
+export function bindSignal(key: Hex, node: Hex): string {
+  if (size(key) !== 33 || size(node) !== 32 || BigInt(node) === 0n) throw new Error('bindSignal: a compressed key and a node')
+  return concat([key, node]).toLowerCase()
 }
 
 /** namehash of the device name after ENSIP-15 normalisation. */

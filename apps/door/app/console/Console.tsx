@@ -2,13 +2,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { bindWedgie, showQr } from '../../lib/bind'
-import { remember } from '../../lib/bindings'
+import { type Remembered, recall, remember } from '../../lib/bindings'
 import { EXPLORER, type Environment } from '../../lib/deployments'
 import { type Device, meet } from '../../lib/device'
+import { nameProblem } from '../../lib/ens'
 import { type Bound, KNOCKD } from '../../lib/knockd'
 import type { Connected } from '../../lib/wallet'
 import { Wedgie } from '../../lib/wedgie'
 import { KillSwitch } from './KillSwitch'
+import { NameField } from './NameField'
 import { Naming } from './Naming'
 import { Screen, type View, short } from './Screen'
 
@@ -32,7 +34,9 @@ export function Console() {
   const [qrUp, setQrUp] = useState(true)
   const [nullifier, setNullifier] = useState<Hex | null>(null)
   const [bound, setBound] = useState<Bound | null>(null)
-  const [justBound, setJustBound] = useState<Hex | null>(null)
+  const [justBound, setJustBound] = useState<Remembered | null>(null)
+  const [label, setLabel] = useState('')
+  const [parent, setParent] = useState('')
   const [wallet, setWallet] = useState<Connected | null>(null)
   const [override, setOverride] = useState<View | null>(null)
   const [elsewhere, setElsewhere] = useState(false)
@@ -89,6 +93,17 @@ export function Console() {
     }
   }, [attach])
 
+  // The name: the one the Wedgie's last World App binding was for, else the one it shows, until the user types one
+  useEffect(() => {
+    if (!device || label || parent) return
+    const from = recall(device.key, 'production')?.name ?? device.name
+    const at = from?.indexOf('.') ?? -1
+    if (from && at > 0) {
+      setLabel(from.slice(0, at))
+      setParent(from.slice(at + 1))
+    }
+  }, [device, label, parent])
+
   // While the QR is up, ask the Wedgie now and then whether it still is: red, or two minutes, takes it down.
   useEffect(() => {
     if (phase !== 'qr' || !wedgie) return
@@ -109,8 +124,11 @@ export function Console() {
     }
   }
 
+  const name = `${label}.${parent}`
+  const nameOk = Boolean(label && parent && !nameProblem(label, parent))
+
   async function start() {
-    if (!wedgie || !device) return
+    if (!wedgie || !device || !nameOk) return
     const ac = new AbortController()
     abort.current = ac
     setProblem(null)
@@ -124,6 +142,7 @@ export function Console() {
         wedgie,
         env,
         device.key,
+        name,
         (s) => {
           setPhase(s.step)
           setReached(STEPS.indexOf(s.step))
@@ -139,8 +158,8 @@ export function Console() {
         ac.signal,
       )
       setBound(out)
-      remember(device.key, out.environment, out.tx)
-      if (out.environment === 'production') setJustBound(out.tx)
+      remember(device.key, out.environment, { tx: out.tx, name })
+      if (out.environment === 'production') setJustBound({ tx: out.tx, name })
       setPhase('done')
     } catch (e) {
       setQr(null)
@@ -243,6 +262,16 @@ export function Console() {
             ) : null}
             {problem ? <p className="problem">{problem}</p> : null}
 
+            <NameField
+              label={label}
+              parent={parent}
+              onChange={(l, p) => {
+                setLabel(l)
+                setParent(p)
+              }}
+              disabled={busy || elsewhere}
+            />
+
             <fieldset className="where" disabled={busy || elsewhere}>
               <legend>Who proves it</legend>
               <label>
@@ -312,7 +341,7 @@ export function Console() {
                 type="button"
                 className="primary"
                 onClick={start}
-                disabled={!device || knockd !== 'ready' || busy || elsewhere}
+                disabled={!device || !nameOk || knockd !== 'ready' || busy || elsewhere}
               >
                 Bind this Wedgie
               </button>
@@ -338,7 +367,10 @@ export function Console() {
                   <span className="hex">{short(bound.bound.keyHash)}</span>.
                 </p>
                 {bound.environment === 'production' ? (
-                  <p>Next, name it in ENS, below: the name's records point at this binding.</p>
+                  <p>
+                    Next, name it {name} in ENS, below: the name's records point at this binding, which is for that
+                    name only.
+                  </p>
                 ) : (
                   <p>
                     This was the Simulator's test identity, so the Wedgie's own screen stays as it was. Only a World App
@@ -352,6 +384,12 @@ export function Console() {
           <Naming
             wedgie={wedgie}
             device={device}
+            label={label}
+            parent={parent}
+            onName={(l, p) => {
+              setLabel(l)
+              setParent(p)
+            }}
             wallet={wallet}
             onWallet={setWallet}
             onDevice={setDevice}

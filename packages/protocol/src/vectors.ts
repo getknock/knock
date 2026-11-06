@@ -105,11 +105,14 @@ export function buildVectors() {
       y,
       compressed: key,
       keyHash: keyHash(x, y),
-      signal: bindSignal(key),
-      signalHash: signalHash(bindSignal(key)),
     },
     action: { name: ACTION, hash: ACTION_HASH },
     device: { name, node: deviceNode(name) },
+    bind: {
+      note: "A binding's World ID signal: the device's key, then its name's node (KnockBinding v2).",
+      signal: bindSignal(key, deviceNode(name)),
+      signalHash: signalHash(bindSignal(key, deviceNode(name))),
+    },
     structs,
   }
 }

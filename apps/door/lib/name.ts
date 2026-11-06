@@ -6,7 +6,7 @@
  * And the kill switch (D20): the wallet unregisters the name and unlinks its records, ENS is read back, and the
  * Wedgie forgets its name and binding. The Bound log stays in World Chain's history, but nothing points at it.
  */
-import { keyHash, uncompressKey } from '@knock-dev/protocol'
+import { deviceNode, keyHash, uncompressKey } from '@knock-dev/protocol'
 import { type Hex, type PublicClient, isAddressEqual } from 'viem'
 import type { Device } from './device'
 import { become, confirmOn, forgetOn } from './device'
@@ -51,8 +51,11 @@ export async function nameWedgie(
     throw new Stopped("That's a Simulator binding: ENS names take a World App one. Bind with World App first.")
   const { x, y } = uncompressKey(device.key)
   if (b.bound.keyHash.toLowerCase() !== keyHash(x, y)) throw new Stopped("That binding is another Wedgie's key.")
-
   const name = `${label}.${parent}`
+  // A binding counts for the name its proof named, and only that one (D22)
+  if (b.bound.node?.toLowerCase() !== deviceNode(name))
+    throw new Stopped(`That binding is for another name than ${name}. Bind the Wedgie for ${name} first.`)
+
   const records: Records = { wallet: c.account, key: device.key, nullifier: b.bound.nullifier, poh: b.poh, sc: device.sc }
   const txs = namingTxs(await readName(c.chain, c.account, label, parent), records)
   on({ step: 'plan', txs })

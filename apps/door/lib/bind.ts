@@ -1,9 +1,10 @@
 /**
- * Binding a Wedgie to a human: a World ID proof for knock-bind whose signal is the device's key (its QR on the
- * Wedgie), then the device's own yes on its BIND page, then knockd's bind() on World Chain.
+ * Binding a Wedgie to a human, for the ENS name it will have (D22): a World ID proof for knock-bind whose signal is
+ * the device's key and then the name's node (its QR on the Wedgie), then the device's own yes on its BIND page,
+ * then knockd's bind() on World Chain. The binding counts for that name only.
  */
 import { IDKit, proofOfHuman } from '@worldcoin/idkit-core'
-import { bindSignal, digest, signalHash, verifySignature } from '@knock-dev/protocol'
+import { bindSignal, deviceNode, digest, signalHash, verifySignature } from '@knock-dev/protocol'
 import { type Hex, toHex } from 'viem'
 import { CHAIN_ID, type Environment, KNOCK_BINDING } from './deployments'
 import { type Bound, bind, rpContext } from './knockd'
@@ -23,9 +24,12 @@ export async function bindWedgie(
   w: Wedgie,
   env: Environment,
   key: Hex,
+  /** The ENS name the Wedgie will have: its records point at this binding, and only it can use it. */
+  name: string,
   on: (s: Step) => void,
   abort: AbortSignal,
 ): Promise<Bound> {
+  const node = deviceNode(name)
   on({ step: 'context' })
   const c = await rpContext()
   const request = await IDKit.request({
@@ -34,7 +38,7 @@ export async function bindWedgie(
     rp_context: c.rp_context,
     allow_legacy_proofs: false,
     environment: env,
-  }).preset(proofOfHuman({ signal: bindSignal(key) }))
+  }).preset(proofOfHuman({ signal: bindSignal(key, node) }))
   const qr = knockQr(request.connectorURI)
   const shown = await showQr(w, qr)
   on({ step: 'qr', link: request.connectorURI, qr, shown })
@@ -47,8 +51,8 @@ export async function bindWedgie(
   if (result.environment !== env) throw new Stopped(`World ID answered from ${result.environment}, not ${env}`)
   const proof = result.responses[0]
   if (!proof || proof.proof.length !== 5) throw new Stopped('World ID answered without a proof')
-  if (proof.signal_hash && BigInt(proof.signal_hash) !== BigInt(signalHash(bindSignal(key))))
-    throw new Stopped("World ID proved another signal than this Wedgie's key")
+  if (proof.signal_hash && BigInt(proof.signal_hash) !== BigInt(signalHash(bindSignal(key, node))))
+    throw new Stopped(`World ID proved another signal than this Wedgie's key for ${name}`)
 
   const nullifier = toHex(BigInt(proof.nullifier), { size: 32 })
   on({ step: 'device', nullifier })
@@ -85,6 +89,7 @@ export async function bindWedgie(
     issuerSchemaId: proof.issuer_schema_id,
     proof: proof.proof,
     signalHash: proof.signal_hash,
+    node,
     key,
     r: sig.r as Hex,
     s: sig.s as Hex,

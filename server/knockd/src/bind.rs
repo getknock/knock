@@ -1,5 +1,6 @@
-//! POST /bind: one device bound to one human, on World Chain. The Console brings IDKit's result for `knock-bind`
-//! and the device's `knock_bind_sig`. knockd checks the device's yes itself (its P-256 signature over KnockBind,
+//! POST /bind: one device bound to one human, for one ENS name (KnockBinding v2, D22), on World Chain. The Console
+//! brings IDKit's result for `knock-bind`, whose signal is the device's key and then the name's node, the node, and
+//! the device's `knock_bind_sig`. knockd checks the device's yes itself (its P-256 signature over KnockBind,
 //! s low), has World ID's verifier check the human's in a simulation, and only then sends `KnockBinding.bind()`,
 //! the gas key paying. A binding that would fail costs nothing.
 
@@ -21,13 +22,16 @@ sol! {
     #[sol(rpc)]
     #[allow(clippy::too_many_arguments)]
     contract KnockBinding {
+        function VERSION() external view returns (uint256);
         function RP_ID() external view returns (uint64);
         function WORLD_ID() external view returns (address);
         function bindDigest(uint256 nullifier, uint64 expiresAtMin, bytes32 x, bytes32 y) external view returns (bytes32);
         function bind(uint256 nullifier, uint256 nonce, uint64 expiresAtMin, uint64 issuerSchemaId,
-            uint256 genesisIssuedAtMin, uint256[5] calldata proof, bytes32 x, bytes32 y, bytes32 r, bytes32 s) external;
-        event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, uint64 expiresAtMin);
+            uint256 genesisIssuedAtMin, uint256[5] calldata proof, bytes32 x, bytes32 y, bytes32 node, bytes32 r,
+            bytes32 s) external;
+        event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, bytes32 indexed node, uint64 expiresAtMin);
         error NotSignedByDevice();
+        error NoName();
     }
 
     /// What the device signs to bind (Knock's EIP-712, domain {name: "Knock", version: "1"}).
@@ -45,6 +49,11 @@ sol! {
 const HALF_N: U256 = U256::from_be_bytes(alloy::primitives::hex!(
     "7FFFFFFF800000007FFFFFFFFFFFFFFFDE737D56D38BCF4279DCE5617E3192A8"
 ));
+
+/// The binding's World ID signal hash: hash_to_field of the device's compressed key, then the name's node.
+pub fn bind_signal_hash(key: &[u8], node: B256) -> B256 {
+    hash_to_field(&[key, node.as_slice()].concat())
+}
 
 /// KnockBinding.bindDigest, worked out here: what the device signed for this binding.
 pub fn bind_digest(registry: Address, nullifier: U256, expires_at_min: u64, key: &[u8]) -> B256 {
@@ -119,9 +128,11 @@ pub struct BindRequest {
     #[serde(default)]
     genesis_issued_at_min: Option<Num>,
     proof: [Num; 5],
-    /// The result's signal_hash, checked against the key when given.
+    /// The result's signal_hash, checked against the key and node when given.
     #[serde(default)]
     signal_hash: Option<Num>,
+    /// The namehash of the ENS name the device will have: the signal's last 32 bytes.
+    node: String,
     /// The device's knock_bind_sig: its compressed key and (r, s).
     key: String,
     r: String,
@@ -155,6 +166,7 @@ fn refusal_name(data: &[u8]) -> Option<&'static str> {
             KnockBinding::NotSignedByDevice::SELECTOR,
             "NotSignedByDevice",
         ),
+        (KnockBinding::NoName::SELECTOR, "NoName"),
     ]
     .into_iter()
     .find(|(s, _)| *s == sel)
@@ -200,11 +212,15 @@ pub async fn bind(
     let (vk, x, y) = device_key(&key).ok_or_else(|| Refusal::bad("key: a compressed P-256 key"))?;
     let r = B256::from_slice(&bytes_of(&q.r, 32, "r")?);
     let s = B256::from_slice(&bytes_of(&q.s, 32, "s")?);
+    let node = B256::from_slice(&bytes_of(&q.node, 32, "node")?);
+    if node.is_zero() {
+        return Err(Refusal::bad("node: a name's namehash, not zero"));
+    }
     if let Some(h) = &q.signal_hash
-        && h.0 != U256::from_be_bytes(hash_to_field(&key).0)
+        && h.0 != U256::from_be_bytes(bind_signal_hash(&key, node).0)
     {
         return Err(Refusal::bad(
-            "signalHash: the proof's signal isn't this device's key",
+            "signalHash: the proof's signal isn't this device's key and this name",
         ));
     }
     if !signed_by(
@@ -228,7 +244,7 @@ pub async fn bind(
     let kb = KnockBinding::new(env.binding, &app.chain);
     let call = kb
         .bind(
-            nullifier, nonce, expires, issuer, genesis, proof, x, y, r, s,
+            nullifier, nonce, expires, issuer, genesis, proof, x, y, node, r, s,
         )
         .from(app.gas);
     if let Err(e) = call.call().await {
@@ -291,6 +307,7 @@ pub async fn bind(
         "bound": {
             "nullifier": word(bound.nullifier),
             "keyHash": bound.keyHash,
+            "node": bound.node,
             "expiresAtMin": bound.expiresAtMin,
         },
         "keyHash": keccak256([x.as_slice(), y.as_slice()].concat()),
@@ -350,6 +367,7 @@ pub async fn bound(
         "bound": {
             "nullifier": word(b.nullifier),
             "keyHash": b.keyHash,
+            "node": b.node,
             "expiresAtMin": b.expiresAtMin,
         },
     })))
@@ -405,9 +423,14 @@ mod tests {
             keccak256([x.as_slice(), y.as_slice()].concat()).to_vec(),
             b(&v["key"]["keyHash"])
         );
+        let node = B256::from_slice(&b(&v["device"]["node"]));
         assert_eq!(
-            hash_to_field(&b(&v["key"]["compressed"])).to_vec(),
-            b(&v["key"]["signalHash"])
+            bind_signal_hash(&b(&v["key"]["compressed"]), node).to_vec(),
+            b(&v["bind"]["signalHash"])
+        );
+        assert_eq!(
+            [b(&v["key"]["compressed"]), node.to_vec()].concat(),
+            b(&v["bind"]["signal"])
         );
     }
 

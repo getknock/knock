@@ -1,13 +1,15 @@
 // The binding flow with stand-ins: IDKit answers with a made-up proof, a pretend Wedgie signs with the vectors'
 // test key as the real one signs in its chip, and fetch plays knockd. What reaches each is checked.
 import { afterEach, beforeAll, describe, expect, mock, test } from 'bun:test'
-import { bindSignal, digest, signDigest, signalHash } from '@knock-dev/protocol'
+import { bindSignal, deviceNode, digest, signDigest, signalHash } from '@knock-dev/protocol'
 import type { Hex } from 'viem'
 import vectors from '../../../spec/vectors/v1.json'
 import { KNOCK_BINDING } from './deployments'
 import type { Message, Wedgie } from './wedgie'
 
 const KEY = vectors.key.compressed as Hex
+const NAME = 'wedgie.itzraj.eth'
+const NODE = deviceNode(NAME)
 const SECRET = (vectors.key as Record<string, string>).secret as Hex
 const NONCE = `0x00${'ab'.repeat(31)}`
 let answer: { success: boolean; result?: unknown; error?: string }
@@ -43,7 +45,7 @@ function proof(over: Record<string, unknown> = {}) {
     responses: [
       {
         identifier: 'proof_of_human',
-        signal_hash: signalHash(bindSignal(KEY)),
+        signal_hash: signalHash(bindSignal(KEY, NODE)),
         proof: ['11', '22', '33', '44', '55'],
         nullifier: '123456789012345678901234567890',
         issuer_schema_id: 1,
@@ -103,13 +105,13 @@ describe('bindWedgie', () => {
     answer = { success: true, result: proof() }
     const { w, seen } = wedgie('green')
     const steps: string[] = []
-    const out = await bindWedgie(w, 'staging', KEY, (s) => steps.push(s.step), new AbortController().signal)
+    const out = await bindWedgie(w, 'staging', KEY, NAME, (s) => steps.push(s.step), new AbortController().signal)
     expect(steps).toEqual(['context', 'qr', 'device', 'chain'])
     expect(out.tx).toBe(`0x${'cd'.repeat(32)}`)
 
-    // IDKit: knockd's context, staging, no legacy proofs, the key as the signal
+    // IDKit: knockd's context, staging, no legacy proofs, the key and then the name's node as the signal
     expect(asked.config).toMatchObject({ app_id: 'app_test', action: 'knock-bind', environment: 'staging', allow_legacy_proofs: false })
-    expect(asked.signal).toBe(KEY.toLowerCase())
+    expect(asked.signal).toBe(vectors.bind.signal)
 
     // The Wedgie: the QR, then BIND for the staging contract, numbers as 32-byte words
     expect(seen.map((m) => m.type)).toEqual(['knock_qr', 'knock_bind'])
@@ -129,6 +131,7 @@ describe('bindWedgie', () => {
       expiresAtMin: 1762400000,
       issuerSchemaId: 1,
       proof: ['11', '22', '33', '44', '55'],
+      node: NODE,
       key: KEY,
     })
   })
@@ -136,7 +139,7 @@ describe('bindWedgie', () => {
   test('red on the Wedgie: no binding, and knockd is never asked to send', async () => {
     knockd()
     answer = { success: true, result: proof() }
-    await expect(bindWedgie(wedgie('red').w, 'staging', KEY, () => {}, new AbortController().signal)).rejects.toThrow(
+    await expect(bindWedgie(wedgie('red').w, 'staging', KEY, NAME, () => {}, new AbortController().signal)).rejects.toThrow(
       'Red on the Wedgie',
     )
     expect(sent.map((x) => x.path)).toEqual(['/rp-context'])
@@ -145,7 +148,7 @@ describe('bindWedgie', () => {
   test("a signature that doesn't hold for the binding stops it here", async () => {
     knockd()
     answer = { success: true, result: proof() }
-    await expect(bindWedgie(wedgie('wrong').w, 'staging', KEY, () => {}, new AbortController().signal)).rejects.toThrow(
+    await expect(bindWedgie(wedgie('wrong').w, 'staging', KEY, NAME, () => {}, new AbortController().signal)).rejects.toThrow(
       "doesn't hold",
     )
     expect(sent.map((x) => x.path)).toEqual(['/rp-context'])
@@ -154,17 +157,18 @@ describe('bindWedgie', () => {
   test("a proof of another signal, from another environment, or none at all: the Wedgie isn't asked", async () => {
     for (const [result, says] of [
       [proof({ signal_hash: signalHash('0x01') }), 'another signal'],
+      [proof({ signal_hash: signalHash(bindSignal(KEY, deviceNode('spare.itzraj.eth'))) }), 'another signal'],
       [{ ...proof(), environment: 'production' }, 'not staging'],
       [{ ...proof(), action: 'something-else' }, '4.0 proof for knock-bind'],
     ] as const) {
       knockd()
       answer = { success: true, result }
       const { w, seen } = wedgie('green')
-      await expect(bindWedgie(w, 'staging', KEY, () => {}, new AbortController().signal)).rejects.toThrow(says)
+      await expect(bindWedgie(w, 'staging', KEY, NAME, () => {}, new AbortController().signal)).rejects.toThrow(says)
       expect(seen.map((m) => m.type)).toEqual(['knock_qr'])
     }
     knockd()
     answer = { success: false, error: 'cancelled' }
-    await expect(bindWedgie(wedgie().w, 'staging', KEY, () => {}, new AbortController().signal)).rejects.toThrow('cancelled')
+    await expect(bindWedgie(wedgie().w, 'staging', KEY, NAME, () => {}, new AbortController().signal)).rejects.toThrow('cancelled')
   })
 })

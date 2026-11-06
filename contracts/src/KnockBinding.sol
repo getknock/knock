@@ -17,12 +17,16 @@ interface IWorldIDVerifier {
     ) external view;
 }
 
-/// @title KnockBinding
-/// @notice Binds a Knock device's P-256 key to one human. Two yeses go in one call: the human's, a World ID proof
-///   for the action "knock-bind" whose signal is the device's compressed key, and the device's, its signature over
-///   KnockBind (made after a green press on the device). A `Bound` log is the record; verifiers read the logs.
-///   No storage, no owner, no upgrades. Anyone may submit a binding: it says only what both yeses say.
+/// @title KnockBinding (v2)
+/// @notice Binds a Knock device's P-256 key to one human, for one ENS name. Two yeses go in one call: the human's,
+///   a World ID proof for the action "knock-bind" whose signal is the device's compressed key and then the name's
+///   node, and the device's, its signature over KnockBind (made after a green press on the device). A `Bound` log
+///   is the record; verifiers read it, and take it for that name only. So a lost device is no use under any other
+///   name, and once its own name is gone (the kill switch), its binding counts nowhere. No storage, no owner, no
+///   upgrades. Anyone may submit a binding: it says only what both yeses say.
+///   v1 had no name in it: the same binding could be reused under any name, so verifiers take v2 bindings only.
 contract KnockBinding {
+    uint256 public constant VERSION = 2;
     /// Knock's EIP-712 domain: {name: "Knock", version: "1"}. No chain or contract: KnockBind names both.
     bytes32 public constant DOMAIN_SEPARATOR = keccak256(
         abi.encode(keccak256("EIP712Domain(string name,string version)"), keccak256("Knock"), keccak256("1"))
@@ -42,11 +46,14 @@ contract KnockBinding {
     uint64 public immutable RP_ID;
 
     /// @notice The device whose key is (x, y), keyHash = keccak256(x || y), belongs to the human with this
-    ///   nullifier, by a World ID proof whose credential lasts at least until expiresAtMin (Unix seconds).
-    event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, uint64 expiresAtMin);
+    ///   nullifier, for the ENS name whose namehash is node, by a World ID proof whose credential lasts at least
+    ///   until expiresAtMin (Unix seconds).
+    event Bound(uint256 indexed nullifier, bytes32 indexed keyHash, bytes32 indexed node, uint64 expiresAtMin);
 
     /// The device's signature doesn't hold for this binding: another key, another binding, s high, or not a key.
     error NotSignedByDevice();
+    /// A binding is for a name: node is its namehash, never zero.
+    error NoName();
 
     constructor(IWorldIDVerifier worldId, uint64 rpId) {
         WORLD_ID = worldId;
@@ -71,6 +78,7 @@ contract KnockBinding {
     /// @param proof The compressed Groth16 proof and the World ID Merkle root it was made against.
     /// @param x The device key's x.
     /// @param y The device key's y.
+    /// @param node The namehash of the ENS name the device will have: the proof's signal ends with it.
     /// @param r The device's signature over bindDigest(nullifier, expiresAtMin, x, y): r.
     /// @param s The same signature's s, low (at most N/2): one signature, one form.
     function bind(
@@ -82,9 +90,11 @@ contract KnockBinding {
         uint256[5] calldata proof,
         bytes32 x,
         bytes32 y,
+        bytes32 node,
         bytes32 r,
         bytes32 s
     ) external {
+        if (node == bytes32(0)) revert NoName();
         bytes32 digest = bindDigest(nullifier, expiresAtMin, x, y);
         if (uint256(s) > HALF_N || !_p256(digest, r, s, x, y)) revert NotSignedByDevice();
         WORLD_ID.verify(
@@ -92,16 +102,16 @@ contract KnockBinding {
             ACTION,
             RP_ID,
             nonce,
-            uint256(keccak256(_compressed(x, y))) >> 8, // IDKit's hash of the signal "0x02.." or "0x03..": its bytes
+            uint256(keccak256(abi.encodePacked(_compressed(x, y), node))) >> 8, // IDKit's hash of the signal's bytes
             expiresAtMin,
             issuerSchemaId,
             genesisIssuedAtMin,
             proof
         );
-        emit Bound(nullifier, keccak256(abi.encodePacked(x, y)), expiresAtMin);
+        emit Bound(nullifier, keccak256(abi.encodePacked(x, y)), node, expiresAtMin);
     }
 
-    /// The 33-byte compressed key: 02 or 03 by y's parity, then x. The device's knock_key, and the bind signal.
+    /// The 33-byte compressed key: 02 or 03 by y's parity, then x. The device's knock_key, and the bind signal's start.
     function _compressed(bytes32 x, bytes32 y) internal pure returns (bytes memory) {
         return abi.encodePacked(uint256(y) & 1 == 1 ? bytes1(0x03) : bytes1(0x02), x);
     }

@@ -70,9 +70,9 @@ export function KillSwitch(props: {
     <section aria-labelledby="kill-title" className="part danger">
       <h2 id="kill-title">Kill switch</h2>
       <p className="lede">
-        For a lost Wedgie, or one you're done with. Your wallet unregisters its name and unlinks the records, and from
-        then on no site takes its knocks. If the Wedgie is here, it forgets its name and binding too. The binding stays
-        in World Chain's history, but nothing points at it any more.
+        For a lost Wedgie, or one you're done with. Your wallet unregisters its name and unlinks the records. Its
+        binding was made for that name only, so from then on no site takes its knocks, under any name. If the Wedgie is
+        here, it forgets its name and binding too. The binding stays in World Chain's history, but counts for nothing.
       </p>
 
       <h3>Your wallet</h3>

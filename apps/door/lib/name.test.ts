@@ -73,7 +73,7 @@ function wedgie(press: 'green' | 'red' = 'green', forgets = true) {
 }
 
 const realFetch = globalThis.fetch
-function knockd(environment: 'production' | 'staging' = 'production', key = KEY) {
+function knockd(environment: 'production' | 'staging' = 'production', key = KEY, node = deviceNode('wedgie.itzraj.eth')) {
   const u = uncompressKey(key)
   globalThis.fetch = (async (url: string) => {
     log.push(`knockd ${new URL(url).pathname}`)
@@ -85,7 +85,7 @@ function knockd(environment: 'production' | 'staging' = 'production', key = KEY)
         tx: TX,
         block: 1,
         poh: `eip155:480:tx:${TX}`,
-        bound: { nullifier: NULLIFIER, keyHash: keyHash(u.x, u.y), expiresAtMin: 1 },
+        bound: { nullifier: NULLIFIER, keyHash: keyHash(u.x, u.y), node, expiresAtMin: 1 },
       }),
       { status: 200 },
     )
@@ -134,7 +134,7 @@ describe('nameWedgie', () => {
     expect(out.records).toEqual({ wallet: WALLET, key: KEY, nullifier: NULLIFIER, poh: `eip155:480:tx:${TX}`, sc: 'S1' })
   })
 
-  test("a Simulator binding, or another Wedgie's: the Wedgie isn't asked and nothing is sent", async () => {
+  test("a Simulator binding, another Wedgie's, or one for another name: the Wedgie isn't asked and nothing is sent", async () => {
     knockd('staging')
     await expect(nameWedgie(wedgie(), wallet(), device, 'wedgie', 'itzraj.eth', TX, () => {})).rejects.toThrow('World App')
     expect(log).toEqual(['knockd /bound'])
@@ -142,6 +142,12 @@ describe('nameWedgie', () => {
     knockd('production', vectors.key.compressed.replace(/^0x0[23]/, (p) => (p === '0x02' ? '0x03' : '0x02')) as Hex)
     await expect(nameWedgie(wedgie(), wallet(), device, 'wedgie', 'itzraj.eth', TX, () => {})).rejects.toThrow(
       "another Wedgie's",
+    )
+    expect(log).toEqual(['knockd /bound'])
+    log = []
+    knockd('production', KEY, deviceNode('spare.itzraj.eth'))
+    await expect(nameWedgie(wedgie(), wallet(), device, 'wedgie', 'itzraj.eth', TX, () => {})).rejects.toThrow(
+      'another name than wedgie.itzraj.eth',
     )
     expect(log).toEqual(['knockd /bound'])
   })

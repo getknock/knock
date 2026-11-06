@@ -67,9 +67,16 @@ describe('vectors', () => {
 describe('helpers', () => {
   const { compressed, x, y } = vectors.key
 
-  it('hash a binding signal as the key bytes, not as UTF-8 text', () => {
-    expect(signalHash(bindSignal(compressed))).toBe(hashToField(hexToBytes(compressed)))
-    expect(signalHash(bindSignal(compressed))).not.toBe(hashToField(stringToBytes(compressed)))
+  it("hash a binding signal as the key's bytes and then the name's node, not as UTF-8 text", () => {
+    const node = deviceNode(vectors.device.name)
+    const signal = bindSignal(compressed, node)
+    expect(signal).toBe(concat([compressed, node]).toLowerCase())
+    expect(signalHash(signal)).toBe(hashToField(hexToBytes(concat([compressed, node]))))
+    expect(signalHash(signal)).not.toBe(hashToField(stringToBytes(signal)))
+    expect(signalHash(signal)).toBe(vectors.bind.signalHash)
+    // Another name, another signal: a proof for one name is no proof for another (D22)
+    expect(signalHash(bindSignal(compressed, deviceNode('spare.itzraj.eth')))).not.toBe(signalHash(signal))
+    expect(() => bindSignal(compressed, pad('0x', { size: 32 }))).toThrow()
     expect(signalHash('hello')).toBe(hashToField(stringToBytes('hello')))
   })
 

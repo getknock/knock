@@ -267,6 +267,16 @@ async fn check(app: &App) -> anyhow::Result<()> {
     );
     for env in [&app.staging, &app.production] {
         let kb = bind::KnockBinding::new(env.binding, &app.chain);
+        let version = kb
+            .VERSION()
+            .call()
+            .await
+            .map_err(|e| anyhow::anyhow!("{}: no KnockBinding v2 there ({})", env.name, app.redact(e)))?;
+        ensure!(
+            version == alloy::primitives::U256::from(2),
+            "{}: KnockBinding v{version}, not v2",
+            env.name
+        );
         let rp = kb
             .RP_ID()
             .call()

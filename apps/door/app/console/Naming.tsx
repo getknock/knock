@@ -15,24 +15,31 @@ type Phase = 'idle' | 'checked' | 'running' | 'done' | 'stopped'
 
 const say = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-/** Step 2 of the setup (D21): the name, after the binding, since its records point at the binding. */
+/** A binding the name will point at: the Console's own (with the name it was made for), or a pasted one, whose
+ *  name nameWedgie checks against its Bound log. */
+type Binding = { tx: Hex; name: string | null }
+
+/** Step 2 of the setup (D21): the name, after the binding, since its records point at the binding. The binding
+ *  was made for this name (D22): the name is chosen above it. */
 export function Naming(props: {
   wedgie: Wedgie | null
   device: Device | null
+  label: string
+  parent: string
+  /** Use another name: the one the Wedgie's binding was made for. */
+  onName: (label: string, parent: string) => void
   wallet: Connected | null
   onWallet: (c: Connected) => void
   onDevice: (d: Device) => void
   onView: (v: View | null) => void
   onBusy: (busy: boolean) => void
   /** The binding the Console just made, if it did: production only names. */
-  justBound: Hex | null
+  justBound: Binding | null
   /** The binding above is running. */
   locked: boolean
 }) {
-  const { wedgie, device, wallet } = props
-  const [label, setLabel] = useState('')
-  const [parent, setParent] = useState('')
-  const [binding, setBinding] = useState<Hex | null>(null)
+  const { wedgie, device, wallet, label, parent } = props
+  const [binding, setBinding] = useState<Binding | null>(null)
   const [pasted, setPasted] = useState('')
   const [plan, setPlan] = useState<Tx[] | null>(null)
   const [phase, setPhase] = useState<Phase>('idle')
@@ -45,8 +52,17 @@ export function Naming(props: {
   }, [device, props.justBound])
 
   const name = `${label}.${parent}`
+  // Another name than the binding's: the plan so far is for the old one
+  useEffect(() => {
+    setPlan(null)
+    setPhase((p) => (p === 'running' ? p : 'idle'))
+  }, [name])
+
   const nameIssue = label && parent ? nameProblem(label, parent) : null
-  const ready = Boolean(wedgie && device && wallet && binding && label && parent && !nameIssue && !props.locked)
+  const otherName = binding?.name && binding.name !== name ? binding.name : null
+  const ready = Boolean(
+    wedgie && device && wallet && binding && !otherName && label && parent && !nameIssue && !props.locked,
+  )
   // The rail: the binding, BECOME, the wallet's transactions, ENS read back, the Wedgie told
   const rail = [
     'Read the binding back from World Chain',
@@ -81,7 +97,7 @@ export function Naming(props: {
     props.onBusy(true)
     let n = plan.length
     try {
-      const out = await nameWedgie(wedgie, wallet, device, label, parent, binding, (s) => {
+      const out = await nameWedgie(wedgie, wallet, device, label, parent, binding.tx, (s) => {
         if (s.step === 'binding') setAt(0)
         if (s.step === 'plan') {
           n = s.txs.length
@@ -99,7 +115,7 @@ export function Naming(props: {
         if (s.step === 'confirm') setAt(3 + n)
       })
       setSent(out.sent)
-      remember(device.key, 'production', binding) // a pasted one too, now that knockd read it back
+      remember(device.key, 'production', { tx: binding.tx, name }) // a pasted one too, now that it's checked
       props.onDevice(await meet(wedgie))
       setPhase('done')
     } catch (e) {
@@ -121,11 +137,31 @@ export function Naming(props: {
       </p>
 
       <h3>The binding it points at</h3>
-      {binding ? (
+      {binding && otherName ? (
+        <div className="field">
+          <p>
+            The Wedgie's World App binding is for {otherName}, and a binding counts for its own name only. Bind it again
+            above for {label && parent ? name : 'the new name'}, or name it {otherName}.
+          </p>
+          <div className="actions">
+            <button
+              type="button"
+              className="quiet"
+              disabled={running}
+              onClick={() => {
+                const at = otherName.indexOf('.')
+                props.onName(otherName.slice(0, at), otherName.slice(at + 1))
+              }}
+            >
+              Name it {otherName}
+            </button>
+          </div>
+        </div>
+      ) : binding ? (
         <p>
-          World App binding,{' '}
-          <a href={`${EXPLORER}/tx/${binding}`} target="_blank" rel="noreferrer">
-            transaction <span className="hex">{short(binding)}</span>
+          World App binding{binding.name ? ` for ${binding.name}` : ''},{' '}
+          <a href={`${EXPLORER}/tx/${binding.tx}`} target="_blank" rel="noreferrer">
+            transaction <span className="hex">{short(binding.tx)}</span>
           </a>
           .
         </p>
@@ -145,7 +181,7 @@ export function Naming(props: {
               type="button"
               className="quiet"
               disabled={!/^0x[0-9a-fA-F]{64}$/.test(pasted)}
-              onClick={() => setBinding(pasted.toLowerCase() as Hex)}
+              onClick={() => setBinding({ tx: pasted.toLowerCase() as Hex, name: null })}
             >
               Use it
             </button>
@@ -157,36 +193,7 @@ export function Naming(props: {
       <WalletBox connected={wallet} onConnect={props.onWallet} />
 
       <h3>The name</h3>
-      <div className="name-row">
-        <input
-          value={label}
-          onChange={(e) => {
-            setLabel(e.target.value.trim().toLowerCase())
-            setPlan(null)
-            setPhase('idle')
-          }}
-          placeholder="wedgie"
-          aria-label="The Wedgie's own label"
-          spellCheck={false}
-          disabled={running}
-        />
-        <span>.</span>
-        <input
-          value={parent}
-          onChange={(e) => {
-            setParent(e.target.value.trim().toLowerCase())
-            setPlan(null)
-            setPhase('idle')
-          }}
-          placeholder="itzraj.eth"
-          aria-label="A name your wallet owns"
-          spellCheck={false}
-          disabled={running}
-        />
-      </div>
-      <p className="hint">
-        For example wedgie.itzraj.eth: the parent is a name your wallet owns, and the label is yours to pick.
-      </p>
+      <p>{label && parent ? name : 'Pick it above, before the binding.'}</p>
       {nameIssue ? <p className="problem">{nameIssue}</p> : null}
 
       <ol className="steps">

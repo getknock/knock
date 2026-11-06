@@ -47,6 +47,8 @@ export type BindBody = {
   issuerSchemaId: number
   proof: string[]
   signalHash?: string
+  /** The namehash of the name the Wedgie will have: the signal's end (D22). */
+  node: Hex
   key: Hex
   r: Hex
   s: Hex
@@ -61,7 +63,7 @@ export type Bound = {
   gasUsed: number
   /** knock.poh: eip155:480:tx:<hash> */
   poh: string
-  bound: { nullifier: Hex; keyHash: Hex; expiresAtMin: number }
+  bound: { nullifier: Hex; keyHash: Hex; node: Hex; expiresAtMin: number }
 }
 
 /** The binding, checked by knockd (the device's signature, then World ID in a simulation) and sent. */
