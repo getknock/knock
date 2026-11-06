@@ -6,9 +6,29 @@
   "redirects": [
     {
       "source": "/",
-      "has": [{ "type": "host", "value": "door.getknock.dev" }],
+      "has": [
+        {
+          "type": "host",
+          "value": "door.getknock.dev"
+        }
+      ],
       "destination": "https://getknock.dev/",
       "permanent": false
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'none'"
+        },
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        }
+      ]
     }
   ]
 }
