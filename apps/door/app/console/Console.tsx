@@ -3,16 +3,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Hex } from 'viem'
 import { forget, killedTx, recall, remember } from '../../lib/bindings'
 import type { Environment } from '../../lib/deployments'
-import { type Device, forgetOn, meet } from '../../lib/device'
+import { type Device, Keyless, NotKnock, forgetOn, meet } from '../../lib/device'
 import { knockState, nameProblem } from '../../lib/ens'
+import { Restarted, knockOf, outdated } from '../../lib/install'
 import { type Sent as Bound, knockdAt, latestBinding } from '../../lib/knockd'
 import type { Sent } from '../../lib/name'
 import { type Known, setup } from '../../lib/setup'
 import { useSite } from '../../lib/sites'
 import { type Connected, PUBLIC } from '../../lib/wallet'
-import { Wedgie } from '../../lib/wedgie'
+import { type Message, Wedgie } from '../../lib/wedgie'
 import { Bar } from './Bar'
 import { BindStep } from './BindStep'
+import { InstallKnock, appName, useLatestKnock } from './InstallKnock'
 import { KillSwitch } from './KillSwitch'
 import { NameStep } from './NameStep'
 import { Naming, SentList } from './Naming'
@@ -21,6 +23,9 @@ import { Step } from './Step'
 import { TxLink } from './TxLink'
 
 const say = (e: unknown) => (e instanceof Error ? e.message : String(e))
+
+/** Knock to put on the Wedgie: for one that runs another app or none, or a newer Knock for an older one */
+type Offer = { from: { mod: string | null } | { knock: number }; to: Wedgie }
 
 function split(name: string): [string, string] {
   const at = name.indexOf('.')
@@ -50,6 +55,18 @@ export function Console() {
   const [inEns, setInEns] = useState<'live' | 'revoked' | 'gone' | null>(null)
   const [forgetting, setForgetting] = useState(false)
   const [forgetProblem, setForgetProblem] = useState<string | null>(null)
+  /** The hello of a Wedgie that runs another app, or none */
+  const [other, setOther] = useState<Message | null>(null)
+  /** The hello of one whose Knock has no key yet */
+  const [keyless, setKeyless] = useState<Message | null>(null)
+  const [installing, setInstalling] = useState(false)
+  /** Why the last install stopped */
+  const [installProblem, setInstallProblem] = useState<string | null>(null)
+  /** What went on, once the Wedgie's back with it */
+  const [fresh, setFresh] = useState<string | null>(null)
+  const [finding, setFinding] = useState(false)
+  const [latest, readAgain] = useLatestKnock(Boolean(wedgie))
+  const lastOffer = useRef<Offer | null>(null)
   const current = useRef<Wedgie | null>(null)
   const lastKey = useRef<Hex | null>(null)
   const club = useSite('club')
@@ -75,18 +92,52 @@ export function Console() {
       current.current = null
       setWedgie(null)
       setDevice(null)
+      setOther(null)
+      setKeyless(null)
+      setFresh(null)
     }
     setWedgie(w)
     setMeeting(true)
+    setOther(null)
+    setKeyless(null)
     try {
       setDevice(await meet(w))
       setProblem(null)
     } catch (e) {
-      setProblem(say(e))
+      if (e instanceof NotKnock) setOther(e.hello)
+      if (e instanceof Keyless) setKeyless(e.hello)
+      setProblem(e instanceof NotKnock ? null : say(e))
     } finally {
       setMeeting(false)
     }
   }, [])
+
+  // After an install the Wedgie restarts, on this port or, after full control (a real reset), on a new one: meet it
+  // again once it's back. While it's away, the install panel stays (finding).
+  const restarted = useCallback(
+    async (w: Wedgie, lost: string) => {
+      setFinding(true)
+      try {
+        const back = w.connected ? w : await Wedgie.back()
+        if (back) await attach(back)
+        else setProblem(lost)
+      } finally {
+        setFinding(false)
+      }
+    },
+    [attach],
+  )
+
+  const installed = (w: Wedgie) => {
+    setInstallProblem(null)
+    setFresh(latest.state === 'ready' && latest.app.version ? `Knock ${latest.app.version} is on it now.` : 'Knock is on it now.')
+    void restarted(w, 'Knock is on your Wedgie, and it restarted. Connect it again.')
+  }
+
+  const stoppedAt = (w: Wedgie, e: unknown) => {
+    setInstallProblem(say(e))
+    if (e instanceof Restarted) void restarted(w, 'Your Wedgie restarted. Connect it again.')
+  }
 
   useEffect(() => {
     if (!Wedgie.supported()) {
@@ -107,6 +158,8 @@ export function Console() {
 
   async function connect() {
     setProblem(null)
+    setInstallProblem(null)
+    setFresh(null)
     try {
       await attach(await Wedgie.pick())
     } catch (e) {
@@ -221,11 +274,47 @@ export function Console() {
     setChosen(null)
   }
 
-  const busy = binding || naming || killing || forgetting
+  const busy = binding || naming || killing || forgetting || installing || finding
+
+  // What to install: Knock for another app, or a newer Knock, offered until the Wedgie's back from installing it
+  const runsApp = device?.app ?? (typeof keyless?.app === 'string' ? keyless.app : null)
+  const newer = latest.state === 'ready' && runsApp !== null && outdated(runsApp, latest.app) ? knockOf(runsApp) : null
+  const offer: Offer | null =
+    wedgie && other
+      ? { from: { mod: typeof other.running === 'string' ? other.running : null }, to: wedgie }
+      : wedgie && newer !== null
+        ? { from: { knock: newer }, to: wedgie }
+        : null
+  useEffect(() => {
+    if (offer) lastOffer.current = offer
+  })
+  const shown = offer ?? (installing || finding ? lastOffer.current : null)
+  const install = (o: Offer) => (
+    <InstallKnock
+      wedgie={o.to}
+      latest={latest}
+      onAgain={readAgain}
+      from={o.from}
+      onView={setView}
+      onBusy={(b) => {
+        setInstalling(b)
+        if (b) setInstallProblem(null)
+      }}
+      onDone={installed}
+      onStopped={stoppedAt}
+      problem={installProblem}
+      busy={busy && !installing}
+    />
+  )
   const boundTx = live.state === 'bound' && boundFor === name ? live.on.tx : null
   const human = set ? device?.nullifier : live.state === 'bound' ? live.on.bound.nullifier : null
   const screen: View =
-    view ?? (!wedgie ? { kind: 'off' } : { kind: 'home', name: device?.name ?? null, human: set })
+    view ??
+    (!wedgie
+      ? { kind: 'off' }
+      : other
+        ? { kind: 'app', name: appName(typeof other.running === 'string' ? other.running : null, latest.state === 'ready' ? latest.shelf : null) }
+        : { kind: 'home', name: device?.name ?? null, human: set })
 
   return (
     <>
@@ -280,6 +369,15 @@ export function Console() {
               </div>
             ) : null}
 
+            {shown && 'knock' in shown.from ? (
+              <section className="body update" aria-labelledby="update">
+                <h2 id="update">
+                  {latest.state === 'ready' && latest.app.version ? `Knock ${latest.app.version} is out` : 'A newer Knock is out'}
+                </h2>
+                {install(shown)}
+              </section>
+            ) : null}
+
             <ol className="steps">
               <Step
                 id="connect"
@@ -289,6 +387,7 @@ export function Console() {
                 done={
                   device ? (
                     <>
+                      {fresh ? `${fresh} ` : ''}
                       {device.app} {device.firmware}, its key <code>{short(device.key)}</code>.
                     </>
                   ) : null
@@ -299,17 +398,30 @@ export function Console() {
                     Your Wedgie connects over USB, which only Chrome, Edge and other Chromium browsers on a computer can
                     do. Open this page in one of those.
                   </p>
+                ) : shown && 'mod' in shown.from ? (
+                  install(shown)
+                ) : installing || finding ? (
+                  <p className="muted" role="status">
+                    Your Wedgie is restarting into Knock. The Console finds it again once it's back.
+                  </p>
                 ) : (
                   <>
                     <p>
                       Plug it into this computer with a cable that carries data, then connect it. Your browser asks
                       which device to use.
                     </p>
+                    {installProblem ? <p className="callout bad">{installProblem}</p> : null}
                     {problem ? <p className="callout bad">{problem}</p> : null}
                     <div className="actions">
-                      <button type="button" className="btn go" onClick={connect} disabled={meeting}>
-                        {meeting ? 'Checking your Wedgie…' : 'Connect your Wedgie'}
-                      </button>
+                      {wedgie ? (
+                        <button type="button" className="btn go" onClick={() => attach(wedgie)} disabled={meeting}>
+                          {meeting ? 'Checking your Wedgie…' : 'Check again'}
+                        </button>
+                      ) : (
+                        <button type="button" className="btn go" onClick={connect} disabled={meeting}>
+                          {meeting ? 'Checking your Wedgie…' : 'Connect your Wedgie'}
+                        </button>
+                      )}
                     </div>
                   </>
                 )}

@@ -187,7 +187,7 @@ export function KillSwitch(props: {
               ENS no longer resolves it, so no site takes this Wedgie's knocks.
               {told === 'forgot' ? ' The Wedgie forgot its name and binding.' : ''}
               {told === 'revoked'
-                ? ' This Wedgie runs Knock 4, which can only mark its name revoked, so its home screen keeps showing it. Install Knock 5 or later on it, then kill again: it forgets.'
+                ? ' This Wedgie runs Knock 4, which can only mark its name revoked, so its home screen keeps showing it. Update its Knock above, then kill again: it forgets.'
                 : ''}
             </p>
             <SentList sent={sent} />

@@ -988,3 +988,13 @@ details.kill summary {
 details.kill {
   scroll-margin-top: calc(var(--top) + 1.5rem);
 }
+
+/* A newer Knock for the connected Wedgie, above the steps */
+.update {
+  margin: 0 0 2.5rem;
+}
+
+.update h2 {
+  margin: 0 0 0.5rem;
+  font-size: 1.125rem;
+}

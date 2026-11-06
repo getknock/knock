@@ -7,6 +7,8 @@ export type Message = { type: string; id?: number; [k: string]: unknown }
 /** Raspberry Pi's USB vendor id: every Wedgie. */
 const PICO = 0x2e8a
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
 export class Wedgie {
   private next = 1
   private waiting = new Map<number, (m: Message) => void>()
@@ -16,6 +18,8 @@ export class Wedgie {
   private gone = false
   /** Called once when the port goes: unplugged, or closed. */
   onclose?: () => void
+  /** Every byte as it comes, besides the lines: MicroPython's raw REPL (repl.ts) */
+  tap?: (bytes: Uint8Array) => void
 
   private constructor(private port: SerialPort) {
     this.writer = port.writable!.getWriter()
@@ -30,6 +34,24 @@ export class Wedgie {
   static async known(): Promise<Wedgie | null> {
     const port = (await navigator.serial.getPorts()).find((p) => p.getInfo().usbVendorId === PICO)
     return port ? Wedgie.open(port) : null
+  }
+
+  /** The Wedgie again after a real restart (install.ts): its port goes, comes back, and goes once more as its WEDGIE
+   *  drive comes up a second in, so it counts once it answers and is still there after that. Null if not in ms. */
+  static async back(ms = 30_000): Promise<Wedgie | null> {
+    const end = Date.now() + ms
+    await sleep(3000)
+    while (Date.now() < end) {
+      const w = await Wedgie.known().catch(() => null)
+      if (w) {
+        const h = await w.ask({ type: 'hello' }, 2000).catch(() => null)
+        await sleep(1500)
+        if (h && w.connected) return w
+        await w.close()
+      }
+      await sleep(1000)
+    }
+    return null
   }
 
   /** Chrome's port picker, showing Wedgies only. */
@@ -63,6 +85,12 @@ export class Wedgie {
     })
   }
 
+  /** Bytes as they are, not a request: Ctrl-C, Ctrl-A, code for the raw REPL (repl.ts) */
+  async send(bytes: Uint8Array) {
+    if (this.gone) throw new Error('the Wedgie is not connected')
+    await this.writer.write(bytes)
+  }
+
   private async read() {
     const decoder = new TextDecoder()
     let buf = ''
@@ -74,6 +102,7 @@ export class Wedgie {
           for (;;) {
             const { value, done } = await reader.read()
             if (done) return
+            this.tap?.(value)
             buf += decoder.decode(value, { stream: true })
             for (let nl = buf.indexOf('\n'); nl >= 0; nl = buf.indexOf('\n')) {
               this.line(buf.slice(0, nl))

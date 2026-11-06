@@ -5,7 +5,24 @@
 import { deviceNode, digest, verifySignature } from '@knock-dev/protocol'
 import { type Hex, toHex } from 'viem'
 import { Stopped, refused } from './stopped'
-import type { Wedgie } from './wedgie'
+import type { Message, Wedgie } from './wedgie'
+
+/** A Wedgie that answers as wedgie firmware but runs another app, or none: the Console offers Knock (install.ts) */
+export class NotKnock extends Stopped {
+  constructor(readonly hello: Message) {
+    super(`This Wedgie runs ${String(hello.running ?? 'no app')}, not Knock.`)
+  }
+}
+
+/** Knock runs, with no key to sign with yet: its hello, for which Knock it is */
+export class Keyless extends Stopped {
+  constructor(
+    message: string,
+    readonly hello: Message,
+  ) {
+    super(message)
+  }
+}
 
 export type Device = {
   app: string
@@ -30,9 +47,8 @@ export const same = (x: unknown, y: string) => typeof x === 'string' && x.toLowe
 
 export async function meet(w: Wedgie): Promise<Device> {
   const h = await w.ask({ type: 'hello' })
-  if (h.running !== 'knock')
-    throw new Stopped(`This Wedgie runs ${String(h.running ?? 'another app')}, not Knock. Install Knock on it first.`)
-  if (typeof h.knock_key !== 'string') throw new Stopped(KEYLESS[String(h.knock_state)] ?? 'Knock has no key.')
+  if (h.running !== 'knock') throw new NotKnock(h)
+  if (typeof h.knock_key !== 'string') throw new Keyless(KEYLESS[String(h.knock_state)] ?? 'Knock has no key.', h)
   const challenge = toHex(crypto.getRandomValues(new Uint8Array(32)))
   const info = await w.ask({ type: 'knock_hello', challenge })
   const d = digest('KnockHello', { challenge })
