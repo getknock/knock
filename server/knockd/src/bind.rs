@@ -160,6 +160,21 @@ fn refusal_name(data: &[u8]) -> Option<&'static str> {
     .map(|(_, n)| n)
 }
 
+/// What the person can do about a refusal, when there's something: a proof World ID no longer takes, or doesn't
+/// take yet, needs a new one.
+fn next_step(name: &str) -> Option<&'static str> {
+    match name {
+        "InvalidMerkleRoot" => Some(
+            "World ID doesn't accept the Merkle root this proof was made against, not yet or no longer. \
+             Bind again for a new proof",
+        ),
+        "ExpirationTooOld" => {
+            Some("The proof is more than 5 hours old. Bind again for a new proof")
+        }
+        _ => None,
+    }
+}
+
 fn chain_trouble(app: &App, what: &str, e: impl std::fmt::Display) -> Refusal {
     tracing::warn!("bind: {what}: {}", app.redact(e));
     Refusal::new(
@@ -221,10 +236,11 @@ pub async fn bind(
                 let name =
                     refusal_name(&data).map_or_else(|| format!("revert {data}"), str::to_string);
                 tracing::info!("bind: {} refuses ({name}); nothing sent", env.name);
+                let step = next_step(&name).map_or_else(String::new, |s| format!(". {s}"));
                 Refusal::new(
                     StatusCode::UNPROCESSABLE_ENTITY,
                     "refused",
-                    format!("{} says no: {name}", env.name),
+                    format!("{} says no: {name}{step}", env.name),
                 )
             }
             None => chain_trouble(&app, "the simulation", e),
@@ -416,5 +432,14 @@ mod tests {
             Some("NotSignedByDevice")
         );
         assert_eq!(refusal_name(&[0, 0, 0, 0]), None);
+        assert!(
+            next_step("InvalidMerkleRoot")
+                .is_some_and(|s| s.ends_with("Bind again for a new proof"))
+        );
+        assert!(
+            next_step("ExpirationTooOld")
+                .is_some_and(|s| s.ends_with("Bind again for a new proof"))
+        );
+        assert_eq!(next_step("ProofInvalid"), None);
     }
 }
