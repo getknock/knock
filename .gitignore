@@ -5,6 +5,7 @@ knock-worldchain-key.json
 node_modules/
 target/
 out/
+packages/*/dist/
 cache/
 .next/
 !.env.example
