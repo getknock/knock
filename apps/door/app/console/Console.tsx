@@ -422,9 +422,14 @@ export function Console() {
                         {stale === 'gone' ? `ENS no longer has ${device.name} for it` : `${device.name} is revoked`}
                       </p>
                       <p>
-                        {stale === 'gone'
-                          ? 'Its name was killed while it was away, or went to another Wedgie, so no site takes its knocks. The Wedgie still shows the name until it forgets it.'
-                          : "Its knock.status in ENS isn't active, so no site takes its knocks. To set it up again, kill the name with the kill switch, below: the Wedgie forgets it too."}
+                        {stale === 'gone' ? (
+                          'Its name was killed while it was away, or went to another Wedgie, so no site takes its knocks. The Wedgie still shows the name until it forgets it.'
+                        ) : (
+                          <>
+                            Its <code>knock.status</code> in ENS isn't <code>active</code>, so no site takes its knocks.
+                            To set it up again, kill the name with the kill switch, below: the Wedgie forgets it too.
+                          </>
+                        )}
                       </p>
                     </div>
                     {forgetProblem ? <p className="callout bad">{forgetProblem}</p> : null}

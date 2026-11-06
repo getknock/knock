@@ -126,8 +126,8 @@ export function KillSwitch(props: {
           is connected here, it forgets its name and binding too.
         </p>
         <p className="muted">
-          The binding stays in World Chain's history, pointed at by nothing. You stay you: bind this Wedgie again, or
-          another, and World App proves your Knock session for it.
+          The binding stays in World Chain's history, pointed at by nothing. Your Knock session stays too: bind this
+          Wedgie again, or another, and World App proves it for the new binding.
         </p>
 
         <WalletBox connected={wallet} onConnect={props.onWallet} />
