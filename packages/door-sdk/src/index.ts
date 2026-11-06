@@ -32,8 +32,8 @@ export class KnockError extends Error {
   }
 }
 
-/** The Door the SDK opens unless told otherwise: Knock's own, run locally for now (D8). */
-export const DOOR = 'http://localhost:3000'
+/** The Door the SDK opens unless told otherwise: Knock's own (D29). */
+export const DOOR = 'https://door.getknock.dev'
 
 export type KnockOptions = {
   /** The site's challenge from its verifier, or a promise of one: the popup opens at once, since browsers allow a

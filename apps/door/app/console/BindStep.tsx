@@ -6,7 +6,7 @@ import { bindWedgie, showQr } from '../../lib/bind'
 import { ACTION, type Environment } from '../../lib/deployments'
 import { type Device, same } from '../../lib/device'
 import { forgetHuman, recallHuman, rememberHuman } from '../../lib/humans'
-import { type Human, KNOCKD, type SessionId, type Sent, human as findHuman } from '../../lib/knockd'
+import { type Human, type SessionId, type Sent, human as findHuman, isLocal, knockdAt } from '../../lib/knockd'
 import type { Wedgie } from '../../lib/wedgie'
 import type { Known } from '../../lib/setup'
 import { type View, short } from './Screen'
@@ -253,8 +253,14 @@ export function BindStep(props: {
 
       {knockd === 'down' ? (
         <p className="callout bad">
-          Knock's signer, knockd, isn't answering at <code>{KNOCKD}</code>. Start it from the repo with{' '}
-          <code>cargo run -p knockd</code>.
+          Knock's signer, knockd, isn't answering at <code>{knockdAt()}</code>.{' '}
+          {isLocal(knockdAt()) ? (
+            <>
+              Start it from the repo with <code>cargo run -p knockd</code>.
+            </>
+          ) : (
+            'Try again in a minute.'
+          )}
         </p>
       ) : null}
       {knockd === 'ready' && known.state === 'checking' ? (

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { type Assertion, KnockError, knock } from '../src/index.ts'
 
 const CHALLENGE = `0x${'ab'.repeat(32)}` as const
-const DOOR = 'http://localhost:3000'
+const DOOR = 'https://door.getknock.dev'
 const assertion = { v: 1, name: 'wedgie.itzraj.eth', challenge: CHALLENGE, counter: 43 } as unknown as Assertion
 
 type Popup = { closed: boolean; posted: [unknown, string][]; postMessage: (m: unknown, o: string) => void; close: () => void }

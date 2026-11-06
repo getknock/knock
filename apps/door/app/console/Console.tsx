@@ -5,7 +5,7 @@ import { forget, killedTx, recall, remember } from '../../lib/bindings'
 import type { Environment } from '../../lib/deployments'
 import { type Device, forgetOn, meet } from '../../lib/device'
 import { knockState, nameProblem } from '../../lib/ens'
-import { KNOCKD, type Sent as Bound, latestBinding } from '../../lib/knockd'
+import { type Sent as Bound, knockdAt, latestBinding } from '../../lib/knockd'
 import type { Sent } from '../../lib/name'
 import { type Known, setup } from '../../lib/setup'
 import { useSite } from '../../lib/sites'
@@ -56,7 +56,7 @@ export function Console() {
 
   const ping = useCallback(async () => {
     try {
-      setKnockd((await fetch(`${KNOCKD}/health`)).ok ? 'ready' : 'down')
+      setKnockd((await fetch(`${knockdAt()}/health`)).ok ? 'ready' : 'down')
     } catch {
       setKnockd('down')
     }

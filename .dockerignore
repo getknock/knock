@@ -1,0 +1,12 @@
+# Only what knockd's image needs (server/knockd/Dockerfile): the Cargo workspace and the files it builds in.
+# Everything else stays out of the build, secrets included.
+*
+!Cargo.toml
+!Cargo.lock
+!crates/
+!server/
+!contracts/deployments/
+!spec/vectors/
+**/target
+**/.env*
+**/*key*.json

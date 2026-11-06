@@ -5,8 +5,8 @@
 //! device in ENS with, finds a Wedgie's latest binding by its key (`/binding`), and finds a returning human's
 //! session (`/human`).
 //!
-//! Its secrets are read here and nowhere else (PLAN.md §5): the World RP key from its key file, and the gas key
-//! and World Chain RPC from `.env`, as are the app's World IDs. None of them is ever logged or sent back, and
+//! Its secrets are read here and nowhere else (PLAN.md §5): the World RP key from its key file or WORLD_RP_KEY,
+//! and the gas key and World Chain RPC from `.env` or the environment, as are the app's World IDs. None of them is ever logged or sent back, and
 //! nothing about who asked is logged: no IPs.
 //!
 //! Anyone can run it (D34). Without an RP key (WORLD_RP_KEY_FILE=none) it signs no World ID requests and does
@@ -15,7 +15,9 @@
 //! gives its deployments in KNOCK_DEPLOYMENTS.
 //!
 //!   cargo run -p knockd        (from the repo root; KNOCKD_ADDR, KNOCKD_ORIGINS, KNOCKD_ENV, WORLD_RP_KEY_FILE,
-//!                               KNOCK_DEPLOYMENTS)
+//!                               WORLD_RP_KEY, KNOCK_DEPLOYMENTS)
+//!
+//! On Fly.io: server/knockd/fly.toml and its Dockerfile, the secrets set with `fly secrets set` (D36).
 
 mod bind;
 mod bindings;
@@ -400,8 +402,21 @@ async fn main() -> anyhow::Result<()> {
             }
         );
     }
-    // The RP key: a knockd without one signs no World ID requests. WORLD_RP_KEY_FILE=none says so; a file named
-    // and missing is an error; the default file missing means this knockd doesn't sign.
+    // The RP key: a knockd without one signs no World ID requests. It's WORLD_RP_KEY itself, as a host's secrets
+    // give it, or in the file WORLD_RP_KEY_FILE names. WORLD_RP_KEY_FILE=none says there's none; a file named and
+    // missing is an error; the default file missing means this knockd doesn't sign.
+    let signer_for = |key: &str, what: &str| -> anyhow::Result<Signer> {
+        let rp_id = var("WORLD_RP_ID")?;
+        Ok(Signer {
+            key: key
+                .trim()
+                .parse()
+                .map_err(|_| anyhow::anyhow!("{what} isn't a key"))?,
+            app_id: var("WORLD_APP_ID")?,
+            rp: rp_number(&rp_id)?,
+            rp_id,
+        })
+    };
     let named = std::env::var("WORLD_RP_KEY_FILE").ok();
     let key_file = named
         .clone()
@@ -410,28 +425,30 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("{why}: this knockd signs no World ID requests; it relays and looks up");
         None
     };
-    let signer = match key_file.trim() {
-        "" | "none" => unsigned("WORLD_RP_KEY_FILE=none"),
-        _ => match std::fs::read_to_string(&key_file) {
-            Ok(text) => {
-                let key: Value =
-                    serde_json::from_str(&text).with_context(|| format!("{key_file}: not JSON"))?;
-                let rp_id = var("WORLD_RP_ID")?;
-                Some(Signer {
-                    key: key["privateKey"]
+    let signer = match std::env::var("WORLD_RP_KEY") {
+        Ok(key) if !key.trim().is_empty() => {
+            ensure!(
+                named.is_none(),
+                "WORLD_RP_KEY and WORLD_RP_KEY_FILE are both set: give the RP key one way"
+            );
+            Some(signer_for(&key, "WORLD_RP_KEY")?)
+        }
+        _ => match key_file.trim() {
+            "" | "none" => unsigned("WORLD_RP_KEY_FILE=none"),
+            _ => match std::fs::read_to_string(&key_file) {
+                Ok(text) => {
+                    let key: Value = serde_json::from_str(&text)
+                        .with_context(|| format!("{key_file}: not JSON"))?;
+                    let key = key["privateKey"]
                         .as_str()
-                        .context("the RP key file has no privateKey")?
-                        .parse()
-                        .map_err(|_| anyhow::anyhow!("the RP key file's privateKey isn't a key"))?,
-                    app_id: var("WORLD_APP_ID")?,
-                    rp: rp_number(&rp_id)?,
-                    rp_id,
-                })
-            }
-            Err(e) if named.is_none() && e.kind() == std::io::ErrorKind::NotFound => {
-                unsigned(&format!("no RP key file ({key_file})"))
-            }
-            Err(e) => return Err(e).with_context(|| format!("reading {key_file}")),
+                        .context("the RP key file has no privateKey")?;
+                    Some(signer_for(key, "the RP key file's privateKey")?)
+                }
+                Err(e) if named.is_none() && e.kind() == std::io::ErrorKind::NotFound => {
+                    unsigned(&format!("no RP key file ({key_file})"))
+                }
+                Err(e) => return Err(e).with_context(|| format!("reading {key_file}")),
+            },
         },
     };
     let gas: PrivateKeySigner = var("RELAYER_WALLET_PRIV_KEY")?

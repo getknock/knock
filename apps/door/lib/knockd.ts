@@ -2,10 +2,32 @@
 import type { Hex } from 'viem'
 import type { Environment } from './deployments'
 
+/** Knock's own knockd (D36), and the one a checkout runs */
+const LIVE = 'https://knockd.getknock.dev'
+const LOCAL = 'http://127.0.0.1:8787'
+
+/** Knock's knockd, or the local one for a Console on localhost, as sites.ts does for the docs and the club */
+function knockdFrom(host: string | null): string {
+  return host === 'localhost' || host === '127.0.0.1' ? LOCAL : LIVE
+}
+
+const here = () => (typeof location === 'undefined' ? null : location.hostname)
+
 /** The knockd this Console relays bindings through and looks them up with: anyone can run one (D34) */
-export const KNOCKD = process.env.NEXT_PUBLIC_KNOCKD ?? 'http://127.0.0.1:8787'
-/** The knockd that signs World ID requests: the one holding the network's RP key, KNOCKD unless said otherwise */
-export const KNOCKD_RP = process.env.NEXT_PUBLIC_KNOCKD_RP ?? KNOCKD
+export function knockdAt(): string {
+  return process.env.NEXT_PUBLIC_KNOCKD ?? knockdFrom(here())
+}
+
+/** The knockd that signs World ID requests: the one holding the network's RP key, Knock's unless said otherwise */
+export function knockdRpAt(): string {
+  return process.env.NEXT_PUBLIC_KNOCKD_RP ?? knockdFrom(here())
+}
+
+/** Whether a knockd is one the person runs from a checkout, which they can start themselves */
+export function isLocal(at: string): boolean {
+  const { hostname } = new URL(at)
+  return hostname === 'localhost' || hostname === '127.0.0.1'
+}
 
 /** knockd's no, as it says it: {error, why}. */
 export class Refused extends Error {
@@ -17,7 +39,7 @@ export class Refused extends Error {
   }
 }
 
-async function post<T>(path: string, body: unknown, to = KNOCKD): Promise<T> {
+async function post<T>(path: string, body: unknown, to = knockdAt()): Promise<T> {
   let r: Response
   try {
     r = await fetch(to + path, {
@@ -26,7 +48,10 @@ async function post<T>(path: string, body: unknown, to = KNOCKD): Promise<T> {
       body: JSON.stringify(body),
     })
   } catch {
-    throw new Refused('offline', `knockd isn't answering at ${to}: start it with cargo run -p knockd`)
+    throw new Refused(
+      'offline',
+      isLocal(to) ? `knockd isn't answering at ${to}: start it with cargo run -p knockd` : `knockd isn't answering at ${to}`,
+    )
   }
   const j = await r.json().catch(() => ({}))
   if (!r.ok) throw new Refused(j.error ?? 'error', j.why ?? `knockd answered ${r.status}`)
@@ -43,7 +68,7 @@ export function rpContext(env: Environment, session: boolean) {
   return post<{ app_id: `app_${string}`; action: string | null; rp_context: RpContext }>(
     '/rp-context',
     { environment: env, session },
-    KNOCKD_RP,
+    knockdRpAt(),
   )
 }
 

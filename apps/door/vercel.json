@@ -1,0 +1,14 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd ../.. && bun install",
+  "buildCommand": "bun run build",
+  "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "door.getknock.dev" }],
+      "destination": "https://getknock.dev/",
+      "permanent": false
+    }
+  ]
+}

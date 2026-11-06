@@ -1,0 +1,33 @@
+# knockd on Fly.io (D36). Run fly from the repo's root, where this file is: the image builds from the whole
+# workspace. Every step, the secrets included, is in the docs: https://docs.getknock.dev/self-host/knockd
+app = "getknock-knockd"
+primary_region = "sin"
+
+[build]
+  dockerfile = "server/knockd/Dockerfile"
+
+[env]
+  KNOCKD_ADDR = "0.0.0.0:8080"
+  # Any Console may ask: one on Knock's network gets its World ID requests signed here (D34). CORS isn't what
+  # guards knockd; its checks and hourly limits are.
+  KNOCKD_ORIGINS = "*"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # One machine, always on: knockd reads World Chain's bindings when it starts, and its limits are per machine
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
